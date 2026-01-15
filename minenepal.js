@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
+const dns = require("dns").promises;
 const { status } = require("minecraft-server-util");
 
 const app = express();
@@ -41,7 +42,7 @@ async function getServerStatus(ip, port = 25565) {
     try {
       const fileData = JSON.parse(fs.readFileSync(filePath, "utf-8"));
       if (Date.now() - fileData.timestamp < TTL) {
-        memoryCache.set(cacheKey, fileData); // reload into memory
+        memoryCache.set(cacheKey, fileData);
         return fileData.data;
       }
     } catch (err) {
@@ -53,10 +54,23 @@ async function getServerStatus(ip, port = 25565) {
   try {
     const result = await status(ip, port, { timeout: 5000, enableSRV: true });
 
+    // resolve numeric IP safely
+    let raw_ip = null;
+    if (result.host) {
+      try {
+        const dnsResult = await dns.lookup(result.host);
+        raw_ip = dnsResult.address;
+      } catch {
+        raw_ip = null;
+      }
+    }
+
     const data = {
       online: true,
-      ip,
-      port,
+      ip,               // requested domain
+      host: result.host || ip, // SRV-resolved host or fallback
+      raw_ip,           // numeric IP or null
+      port: result.port || port, // actual port pinged or fallback
       ping: result.roundTripLatency,
       version: result.version.name,
       players: {
@@ -68,7 +82,7 @@ async function getServerStatus(ip, port = 25565) {
         raw: result.motd.raw,
         html: result.motd.html,
       },
-      icon: result.favicon || null, // server icon in base64
+      icon: result.favicon || null,
     };
 
     const cacheEntry = { timestamp: Date.now(), data };
@@ -77,14 +91,18 @@ async function getServerStatus(ip, port = 25565) {
 
     return data;
   } catch (err) {
+    // Offline or unreachable
     const offlineData = {
       online: false,
       ip,
-      port,
+      host: ip,    // fallback
+      raw_ip: null,
+      port,        // port we tried
       ping: null,
       error: "Server offline or unreachable",
       icon: null,
     };
+
     const cacheEntry = { timestamp: Date.now(), data: offlineData };
     memoryCache.set(cacheKey, cacheEntry);
     fs.writeFileSync(filePath, JSON.stringify(cacheEntry, null, 2));
@@ -95,14 +113,12 @@ async function getServerStatus(ip, port = 25565) {
 
 /**
  * 1️⃣ Bulk route MUST be defined BEFORE dynamic routes
- * Otherwise Express will think "bulk" is a single server IP
  */
 app.get("/api/server/status/bulk", async (req, res) => {
   const serversParam = req.query.servers;
 
   if (!serversParam) return res.status(400).json({ error: "No servers provided" });
 
-  // Ensure serversParam is a string and split by comma
   const servers = serversParam.toString().split(",").map(s => s.trim()).filter(s => s);
 
   if (servers.length === 0) return res.status(400).json({ error: "No valid servers provided" });
@@ -114,7 +130,6 @@ app.get("/api/server/status/bulk", async (req, res) => {
       let ip = s;
       let port = 25565;
 
-      // allow ip:port format
       if (ip.includes(":")) {
         const parts = ip.split(":");
         ip = parts[0];
@@ -128,7 +143,7 @@ app.get("/api/server/status/bulk", async (req, res) => {
   res.json(results);
 });
 
-// 2️⃣ Single server routes (defined after bulk)
+// 2️⃣ Single server routes
 app.get("/api/server/status/:ip/:port", async (req, res) => {
   const ip = req.params.ip;
   const port = parseInt(req.params.port);
