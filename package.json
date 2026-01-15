@@ -2,8 +2,10 @@
   "dependencies": {
     "@minescope/mineping": "^2.0.1",
     "cors": "^2.8.5",
+    "dns": "^0.2.2",
     "express": "^5.2.1",
     "minecraft-server-util": "^5.4.4",
-    "node-fetch": "2"
+    "node-fetch": "2",
+    "sharp": "^0.34.5"
   }
 }
