@@ -1,6 +1,8 @@
 // minenepal.js
 const express = require("express");
 const cors = require("cors");
+const fs = require("fs");
+const path = require("path");
 const { status } = require("minecraft-server-util");
 
 const app = express();
@@ -9,32 +11,56 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// In-memory cache to reduce ping spam
-const cache = new Map();
+// Cache directories & TTL
+const CACHE_DIR = path.join(__dirname, "cache");
 const CACHE_TTL = 10 * 1000; // 10 seconds
 
-// Handler function
+if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR);
+
+// In-memory cache
+const memoryCache = new Map();
+
+// Utility: sanitize filename
+function sanitizeFilename(ip, port) {
+  return ip.replace(/[:/\\]/g, "_") + `_${port}.json`;
+}
+
+// Main handler
 async function checkServer(req, res) {
   const ip = req.params.ip;
   const port = parseInt(req.params.port) || 25565;
   const cacheKey = `${ip}:${port}`;
+  const filePath = path.join(CACHE_DIR, sanitizeFilename(ip, port));
 
-  // Serve cached response if exists
-  if (cache.has(cacheKey)) {
-    return res.json(cache.get(cacheKey));
+  // 1️⃣ Check memory cache
+  if (memoryCache.has(cacheKey)) {
+    const cached = memoryCache.get(cacheKey);
+    if (Date.now() - cached.timestamp < CACHE_TTL) {
+      return res.json(cached.data);
+    }
   }
 
-  try {
-    const result = await status(ip, port, {
-      timeout: 5000,
-      enableSRV: true, // resolves domain SRV records
-    });
+  // 2️⃣ Check file cache
+  if (fs.existsSync(filePath)) {
+    try {
+      const fileData = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      if (Date.now() - fileData.timestamp < CACHE_TTL) {
+        memoryCache.set(cacheKey, fileData); // load into memory
+        return res.json(fileData.data);
+      }
+    } catch (err) {
+      console.error("Error reading cache file:", filePath, err);
+    }
+  }
 
-    const response = {
+  // 3️⃣ Ping server
+  try {
+    const result = await status(ip, port, { timeout: 5000, enableSRV: true });
+    const data = {
       online: true,
       ip,
       port,
-      ping: result.roundTripLatency, // ping in ms
+      ping: result.roundTripLatency,
       version: result.version.name,
       players: {
         online: result.players.online,
@@ -47,25 +73,19 @@ async function checkServer(req, res) {
       },
     };
 
-    // Cache the response
-    cache.set(cacheKey, response);
-    setTimeout(() => cache.delete(cacheKey), CACHE_TTL);
+    const cacheEntry = { timestamp: Date.now(), data };
+    memoryCache.set(cacheKey, cacheEntry); // memory cache
+    fs.writeFileSync(filePath, JSON.stringify(cacheEntry, null, 2)); // file cache
 
-    res.json(response);
+    res.json(data);
   } catch (err) {
-    const offlineResponse = {
-      online: false,
-      ip,
-      port,
-      ping: null,
-      error: "Server is offline or unreachable",
-    };
+    const offlineData = { online: false, ip, port, ping: null, error: "Server offline or unreachable" };
+    const cacheEntry = { timestamp: Date.now(), data: offlineData };
 
-    // Cache offline response too
-    cache.set(cacheKey, offlineResponse);
-    setTimeout(() => cache.delete(cacheKey), CACHE_TTL);
+    memoryCache.set(cacheKey, cacheEntry);
+    fs.writeFileSync(filePath, JSON.stringify(cacheEntry, null, 2));
 
-    res.status(404).json(offlineResponse);
+    res.status(404).json(offlineData);
   }
 }
 
