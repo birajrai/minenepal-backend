@@ -93,22 +93,10 @@ async function getServerStatus(ip, port = 25565) {
   }
 }
 
-// Single server routes
-app.get("/api/server/status/:ip/:port", async (req, res) => {
-  const ip = req.params.ip;
-  const port = parseInt(req.params.port);
-  const data = await getServerStatus(ip, port);
-  res.status(data.online ? 200 : 404).json(data);
-});
-
-app.get("/api/server/status/:ip", async (req, res) => {
-  const ip = req.params.ip;
-  const data = await getServerStatus(ip);
-  res.status(data.online ? 200 : 404).json(data);
-});
-
-// Bulk server route
-// Example: /api/server/status/bulk?servers=play.hypixel.net,mcnpnetwork.com
+/**
+ * 1️⃣ Bulk route MUST be defined BEFORE dynamic routes
+ * Otherwise Express will think "bulk" is a single server IP
+ */
 app.get("/api/server/status/bulk", async (req, res) => {
   const serversParam = req.query.servers;
 
@@ -126,7 +114,7 @@ app.get("/api/server/status/bulk", async (req, res) => {
       let ip = s;
       let port = 25565;
 
-      // Allow ip:port format
+      // allow ip:port format
       if (ip.includes(":")) {
         const parts = ip.split(":");
         ip = parts[0];
@@ -138,6 +126,20 @@ app.get("/api/server/status/bulk", async (req, res) => {
   );
 
   res.json(results);
+});
+
+// 2️⃣ Single server routes (defined after bulk)
+app.get("/api/server/status/:ip/:port", async (req, res) => {
+  const ip = req.params.ip;
+  const port = parseInt(req.params.port);
+  const data = await getServerStatus(ip, port);
+  res.status(data.online ? 200 : 404).json(data);
+});
+
+app.get("/api/server/status/:ip", async (req, res) => {
+  const ip = req.params.ip;
+  const data = await getServerStatus(ip);
+  res.status(data.online ? 200 : 404).json(data);
 });
 
 // Start server
