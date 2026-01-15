@@ -1,143 +1,163 @@
 // minenepal.js
+"use strict";
+
 const express = require("express");
 const cors = require("cors");
-const fs = require("fs");
 const path = require("path");
 const dns = require("dns").promises;
+const fs = require("fs/promises");
 const { status } = require("minecraft-server-util");
 const sharp = require("sharp");
 
 const app = express();
 const PORT = 10000;
 
+// ======================
+// Middleware
+// ======================
 app.use(cors());
 app.use(express.json());
+app.disable("x-powered-by");
+app.set("trust proxy", true);
 
-// Serve icons statically
-app.use("/icons", express.static(path.join(__dirname, "cache/icons")));
-
-// Cache config
+// ======================
+// Paths & Cache Config
+// ======================
 const CACHE_DIR = path.join(__dirname, "cache");
 const ICON_DIR = path.join(CACHE_DIR, "icons");
 const TTL = 15 * 1000; // 15 seconds
 
-if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR);
-if (!fs.existsSync(ICON_DIR)) fs.mkdirSync(ICON_DIR);
+// Serve icons
+app.use("/icons", express.static(ICON_DIR));
 
-// Memory cache
+// ======================
+// Memory Cache
+// ======================
 const memoryCache = new Map();
 
-// List of servers to auto-refresh
+// ======================
+// Auto-refresh servers
+// ======================
 const autoRefreshServers = [
   "play.hypixel.net",
   "play.craftnepal.com",
-  "mcnpnetwork.com",
-  // Add more servers here
+  "mcnpnetwork.com"
 ];
 
-// Utility to sanitize filenames for JSON cache
-function sanitizeFilename(ip, port) {
-  return ip.replace(/[:/\\]/g, "_") + `_${port}.json`;
-}
+// ======================
+// Init directories
+// ======================
+(async () => {
+  await fs.mkdir(ICON_DIR, { recursive: true });
+})();
 
-// Utility to sanitize icon filenames
-function sanitizeIconName(ip, port) {
-  return ip.replace(/[:/\\]/g, "_") + `_${port}.png`;
-}
+// ======================
+// Cache cleanup
+// ======================
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of memoryCache) {
+    if (now - value.timestamp > TTL) {
+      memoryCache.delete(key);
+    }
+  }
+}, TTL);
 
-// Function to save icon to file and return URL
-async function saveIcon(iconBase64, ip, port) {
+// ======================
+// Utils
+// ======================
+const sanitize = (s) => s.replace(/[:/\\]/g, "_");
+
+const jsonFile = (ip, port) =>
+  path.join(CACHE_DIR, `${sanitize(ip)}_${port}.json`);
+
+const iconFile = (ip, port) =>
+  path.join(ICON_DIR, `${sanitize(ip)}_${port}.png`);
+
+async function saveIcon(base64, ip, port) {
   try {
-    const base64Data = iconBase64.replace(/^data:image\/png;base64,/, "");
-    const buffer = Buffer.from(base64Data, "base64");
+    const data = base64.replace(/^data:image\/png;base64,/, "");
+    const buffer = Buffer.from(data, "base64");
 
-    // Resize to 32x32 to reduce size
-    const resizedBuffer = await sharp(buffer).resize(32, 32).png().toBuffer();
+    const resized = await sharp(buffer)
+      .resize(32, 32)
+      .png()
+      .toBuffer();
 
-    const iconName = sanitizeIconName(ip, port);
-    const iconPath = path.join(ICON_DIR, iconName);
+    const filePath = iconFile(ip, port);
+    await fs.writeFile(filePath, resized);
 
-    fs.writeFileSync(iconPath, resizedBuffer);
-
-    // Return URL for API
-    return `/icons/${iconName}`;
-  } catch (err) {
-    console.error("Failed to save icon for", ip, port, err);
+    return `/icons/${path.basename(filePath)}`;
+  } catch {
     return null;
   }
 }
 
-// Function to get server status
+// ======================
+// Core status function
+// ======================
 async function getServerStatus(ip, port = 25565) {
-  const cacheKey = `${ip}:${port}`;
-  const filePath = path.join(CACHE_DIR, sanitizeFilename(ip, port));
+  const key = `${ip}:${port}`;
+  const filePath = jsonFile(ip, port);
 
-  // 1️⃣ Check memory cache
-  if (memoryCache.has(cacheKey)) {
-    const cached = memoryCache.get(cacheKey);
-    if (Date.now() - cached.timestamp < TTL) return cached.data;
-  }
+  // Memory cache
+  const mem = memoryCache.get(key);
+  if (mem && Date.now() - mem.timestamp < TTL) return mem.data;
 
-  // 2️⃣ Check file cache
-  if (fs.existsSync(filePath)) {
-    try {
-      const fileData = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-      if (Date.now() - fileData.timestamp < TTL) {
-        memoryCache.set(cacheKey, fileData);
-        return fileData.data;
-      }
-    } catch (err) {
-      console.error("Error reading cache file:", filePath, err);
-    }
-  }
-
-  // 3️⃣ Ping server
+  // File cache
   try {
-    const result = await status(ip, port, { timeout: 5000, enableSRV: true });
-
-    // Resolve numeric IP
-    let raw_ip = null;
-    if (result.host) {
-      try {
-        const dnsResult = await dns.lookup(result.host);
-        raw_ip = dnsResult.address;
-      } catch {}
+    const file = JSON.parse(await fs.readFile(filePath, "utf8"));
+    if (Date.now() - file.timestamp < TTL) {
+      memoryCache.set(key, file);
+      return file.data;
     }
+  } catch {}
 
-    // Handle icon
-    let iconUrl = null;
-    if (result.favicon) {
-      iconUrl = await saveIcon(result.favicon, ip, result.port || port);
+  // Ping server
+  try {
+    const res = await status(ip, port, {
+      timeout: 5000,
+      enableSRV: true
+    });
+
+    let raw_ip = null;
+    try {
+      const lookup = await dns.lookup(res.host || ip);
+      raw_ip = lookup.address;
+    } catch {}
+
+    let icon = null;
+    if (res.favicon) {
+      icon = await saveIcon(res.favicon, ip, res.port || port);
     }
 
     const data = {
       online: true,
-      ip,                   // requested domain
-      host: result.host || ip, // SRV-resolved host
-      raw_ip,               // numeric IP
-      port: result.port || port, // actual port pinged
-      ping: result.roundTripLatency,
-      version: result.version.name,
+      ip,
+      host: res.host || ip,
+      raw_ip,
+      port: res.port || port,
+      ping: res.roundTripLatency,
+      version: res.version.name,
       players: {
-        online: result.players.online,
-        max: result.players.max,
+        online: res.players.online,
+        max: res.players.max
       },
       motd: {
-        clean: result.motd.clean,
-        raw: result.motd.raw,
-        html: result.motd.html,
+        clean: res.motd.clean,
+        raw: res.motd.raw,
+        html: res.motd.html
       },
-      icon: iconUrl,        // icon URL
+      icon
     };
 
-    const cacheEntry = { timestamp: Date.now(), data };
-    memoryCache.set(cacheKey, cacheEntry);
-    fs.writeFileSync(filePath, JSON.stringify(cacheEntry, null, 2));
+    const entry = { timestamp: Date.now(), data };
+    memoryCache.set(key, entry);
+    await fs.writeFile(filePath, JSON.stringify(entry, null, 2));
 
     return data;
   } catch {
-    // Offline or unreachable
-    const offlineData = {
+    const offline = {
       online: false,
       ip,
       host: ip,
@@ -145,27 +165,29 @@ async function getServerStatus(ip, port = 25565) {
       port,
       ping: null,
       error: "Server offline or unreachable",
-      icon: null,
+      icon: null
     };
 
-    const cacheEntry = { timestamp: Date.now(), data: offlineData };
-    memoryCache.set(cacheKey, cacheEntry);
-    fs.writeFileSync(filePath, JSON.stringify(cacheEntry, null, 2));
+    const entry = { timestamp: Date.now(), data: offline };
+    memoryCache.set(key, entry);
+    await fs.writeFile(filePath, JSON.stringify(entry, null, 2));
 
-    return offlineData;
+    return offline;
   }
 }
 
-// Auto-refresh all servers every 15s
+// ======================
+// Auto refresh loop
+// ======================
 async function refreshAllServers() {
-  for (const s of autoRefreshServers) {
+  for (let s of autoRefreshServers) {
     let ip = s;
     let port = 25565;
 
-    if (ip.includes(":")) {
-      const parts = ip.split(":");
-      ip = parts[0];
-      port = parseInt(parts[1]) || 25565;
+    if (s.includes(":")) {
+      const p = s.split(":");
+      ip = p[0];
+      port = parseInt(p[1]) || 25565;
     }
 
     try {
@@ -174,91 +196,57 @@ async function refreshAllServers() {
   }
 }
 
-// Start background refresh loop
 setInterval(refreshAllServers, TTL);
-
-// Initial refresh
 refreshAllServers();
 
-// Bulk endpoint (cache-aware)
+// ======================
+// Routes
+// ======================
+
+// Bulk
 app.get("/api/server/status/bulk", async (req, res) => {
-  const serversParam = req.query.servers;
+  const list = req.query.servers;
+  if (!list) return res.status(400).json({ error: "No servers provided" });
 
-  if (!serversParam) return res.status(400).json({ error: "No servers provided" });
-
-  const servers = serversParam.toString().split(",").map(s => s.trim()).filter(s => s);
-
-  if (servers.length === 0) return res.status(400).json({ error: "No valid servers provided" });
-
+  const servers = list.split(",").map(s => s.trim()).filter(Boolean);
   const results = {};
-  const toPing = [];
 
-  for (let s of servers) {
-    let ip = s;
-    let port = 25565;
+  await Promise.all(
+    servers.map(async (s) => {
+      let ip = s;
+      let port = 25565;
 
-    if (ip.includes(":")) {
-      const parts = ip.split(":");
-      ip = parts[0];
-      port = parseInt(parts[1]) || 25565;
-    }
+      if (s.includes(":")) {
+        const p = s.split(":");
+        ip = p[0];
+        port = parseInt(p[1]) || 25565;
+      }
 
-    const cacheKey = `${ip}:${port}`;
-    const filePath = path.join(CACHE_DIR, sanitizeFilename(ip, port));
-
-    let cachedData = null;
-
-    // Memory cache
-    if (memoryCache.has(cacheKey)) {
-      const cached = memoryCache.get(cacheKey);
-      if (Date.now() - cached.timestamp < TTL) cachedData = cached.data;
-    }
-
-    // File cache
-    if (!cachedData && fs.existsSync(filePath)) {
-      try {
-        const fileData = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-        if (Date.now() - fileData.timestamp < TTL) {
-          cachedData = fileData.data;
-          memoryCache.set(cacheKey, fileData);
-        }
-      } catch {}
-    }
-
-    if (cachedData) {
-      results[`${ip}:${port}`] = cachedData;
-    } else {
-      toPing.push({ ip, port, key: `${ip}:${port}` });
-    }
-  }
-
-  // Ping only servers that need update (rare, thanks to auto-refresh)
-  if (toPing.length > 0) {
-    await Promise.all(
-      toPing.map(async (server) => {
-        results[server.key] = await getServerStatus(server.ip, server.port);
-      })
-    );
-  }
+      results[`${ip}:${port}`] = await getServerStatus(ip, port);
+    })
+  );
 
   res.json(results);
 });
 
-// Single server routes
+// Single (with port)
 app.get("/api/server/status/:ip/:port", async (req, res) => {
-  const ip = req.params.ip;
-  const port = parseInt(req.params.port);
-  const data = await getServerStatus(ip, port);
+  const data = await getServerStatus(
+    req.params.ip,
+    parseInt(req.params.port)
+  );
   res.status(data.online ? 200 : 404).json(data);
 });
 
+// Single (default port)
 app.get("/api/server/status/:ip", async (req, res) => {
-  const ip = req.params.ip;
-  const data = await getServerStatus(ip);
+  const data = await getServerStatus(req.params.ip);
   res.status(data.online ? 200 : 404).json(data);
 });
 
+// ======================
 // Start server
+// ======================
 app.listen(PORT, () => {
-  console.log(`🚀 MineNepal Server Status API running on http://localhost:${PORT}`);
+  console.log(`🚀 MineNepal API running on http://localhost:${PORT}`);
 });
