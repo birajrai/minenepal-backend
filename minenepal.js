@@ -53,6 +53,7 @@ app.use((req, res, next) => {
 // ======================
 const CACHE_DIR = path.join(__dirname, "cache");
 const ICON_DIR = path.join(CACHE_DIR, "icons");
+const BANNER_DIR = path.join(CACHE_DIR, "banners");
 const TTL = 15 * 1000; // 15 seconds
 
 // Serve icons
@@ -75,9 +76,9 @@ const autoRefreshServers = [
 
 // ======================
 // Init directories
-// ======================
 (async () => {
   await fs.mkdir(ICON_DIR, { recursive: true });
+  await fs.mkdir(BANNER_DIR, { recursive: true });
 })();
 
 // ======================
@@ -145,6 +146,7 @@ async function cleanupOldFiles(dir, maxAge = 24 * 60 * 60 * 1000) { // 24 hours
 setInterval(() => {
   cleanupOldFiles(CACHE_DIR);
   cleanupOldFiles(ICON_DIR);
+  cleanupOldFiles(BANNER_DIR);
 }, 24 * 60 * 60 * 1000); // 24 hours
 
 async function getSystemMetrics() {
@@ -333,7 +335,17 @@ async function getServerStatus(ip, port = 25565) {
   }
 }
 
-async function generateBanner(data) {
+async function generateBanner(ip, port, data) {
+  const bannerFile = path.join(BANNER_DIR, `${sanitize(ip)}_${port}.webp`);
+
+  // Check cache
+  try {
+    const stat = await fs.stat(bannerFile);
+    if (Date.now() - stat.mtime.getTime() < TTL) {
+      return await fs.readFile(bannerFile);
+    }
+  } catch {}
+
   const width = 600;
   const height = 120;
   const iconSize = 64;
@@ -346,9 +358,10 @@ async function generateBanner(data) {
   svg += `<defs><linearGradient id="grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" style="stop-color:#2c2f33;stop-opacity:1" /><stop offset="100%" style="stop-color:#1e2124;stop-opacity:1" /></linearGradient></defs>`;
   svg += `<rect width="100%" height="100%" fill="url(#grad)"/>`;
 
-  // Motd text (colored)
+  // Motd text (colored and styled)
   let motdHtml = data.motd.html.replace(/^<span>/, '').replace(/<\/span>$/, '').replace(/\n/g, ' ');
-  const svgLine = motdHtml.replace(/<span style="color: ([^"]*)">([^<]*)<\/span>/g, '<tspan fill="$1">$2</tspan>');
+  let svgLine = motdHtml.replace(/<span style="color: ([^;]*); font-weight: bold">([^<]*)<\/span>/g, '<tspan fill="$1" font-weight="bold">$2</tspan>');
+  svgLine = svgLine.replace(/<span style="color: ([^"]*)">([^<]*)<\/span>/g, '<tspan fill="$1">$2</tspan>');
   svg += `<text x="${textX}" y="35" font-family="monospace" font-size="14" text-anchor="middle" xml:space="preserve">${svgLine}</text>`;
 
   // Ping (top right)
@@ -375,7 +388,9 @@ async function generateBanner(data) {
     } catch {}
   }
 
-  return await image.webp().toBuffer();
+  const buffer = await image.webp().toBuffer();
+  await fs.writeFile(bannerFile, buffer);
+  return buffer;
 }
 
 // ======================
@@ -506,7 +521,7 @@ app.get("/api/server/banner/:ip/:port", async (req, res) => {
     }
 
     // Generate banner
-    const banner = await generateBanner(data);
+    const banner = await generateBanner(req.params.ip, parseInt(req.params.port), data);
     res.type('webp').send(banner);
   } catch (err) {
     console.error('Banner with port error:', err);
@@ -523,7 +538,7 @@ app.get("/api/server/banner/:ip", async (req, res) => {
     }
 
     // Generate banner
-    const banner = await generateBanner(data);
+    const banner = await generateBanner(req.params.ip, 25565, data);
     res.type('webp').send(banner);
   } catch (err) {
     console.error('Banner error:', err);
