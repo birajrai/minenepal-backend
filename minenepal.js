@@ -286,7 +286,6 @@ async function getServerStatus(ip, port = 25565) {
         max: res.players.max
       },
       motd: {
-        clean: res.motd.clean,
         raw: res.motd.raw,
         html: res.motd.html
       },
