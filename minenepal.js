@@ -333,6 +333,58 @@ async function getServerStatus(ip, port = 25565) {
   }
 }
 
+async function generateBanner(data) {
+  const width = 600;
+  const height = 120;
+  const iconSize = 64;
+  const padding = 10;
+  const textX = (width - iconSize - padding * 2) / 2 + iconSize + padding;
+
+  let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`;
+
+  // Background with gradient
+  svg += `<defs><linearGradient id="grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" style="stop-color:#2c2f33;stop-opacity:1" /><stop offset="100%" style="stop-color:#1e2124;stop-opacity:1" /></linearGradient></defs>`;
+  svg += `<rect width="100%" height="100%" fill="url(#grad)"/>`;
+
+  // Motd text (colored, multiline)
+  const motdHtml = data.motd.html;
+  const motdLines = motdHtml.split('\n');
+  let yPos = 25;
+  motdLines.forEach(line => {
+    if (line.trim()) {
+      const svgLine = line.replace(/<span style="color: ([^"]*)">([^<]*)<\/span>/g, '<tspan fill="$1">$2</tspan>');
+      svg += `<text x="${textX}" y="${yPos}" font-family="monospace" font-size="14" text-anchor="middle" xml:space="preserve">${svgLine}</text>`;
+      yPos += 18;
+    }
+  });
+
+  // Ping (top right)
+  const pingText = `${data.ping}ms`;
+  svg += `<text x="${width - padding}" y="25" fill="#00ff00" font-family="Arial, sans-serif" font-size="14" text-anchor="end">${pingText}</text>`;
+
+  // Players (below motd)
+  const playersText = `${data.players.online}/${data.players.max} players`;
+  svg += `<text x="${textX}" y="65" fill="#cccccc" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">${playersText}</text>`;
+
+  // Version (bottom)
+  const versionText = data.version.substring(0, 30);
+  svg += `<text x="${textX}" y="90" fill="#aaaaaa" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">${versionText}</text>`;
+
+  svg += '</svg>';
+
+  // Use Sharp to render SVG and composite icon
+  let image = sharp(Buffer.from(svg));
+
+  if (data.icon) {
+    const iconPath = path.join(__dirname, 'cache', 'icons', path.basename(data.icon));
+    try {
+      image = image.composite([{ input: await sharp(iconPath).resize(iconSize, iconSize).webp().toBuffer(), top: (height - iconSize) / 2, left: padding }]);
+    } catch {}
+  }
+
+  return await image.webp().toBuffer();
+}
+
 // ======================
 // Auto refresh loop
 // ======================
@@ -448,6 +500,40 @@ app.get("/api/server/status/:ip", async (req, res) => {
     res.status(data.online ? 200 : 404).json(data);
   } catch (err) {
     console.error('Single status error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Banner (with port)
+app.get("/api/server/banner/:ip/:port", async (req, res) => {
+  try {
+    const data = await getServerStatus(req.params.ip, parseInt(req.params.port));
+    if (!data.online) {
+      return res.status(404).json({ error: 'Server offline' });
+    }
+
+    // Generate banner
+    const banner = await generateBanner(data);
+    res.type('webp').send(banner);
+  } catch (err) {
+    console.error('Banner with port error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Banner (default port)
+app.get("/api/server/banner/:ip", async (req, res) => {
+  try {
+    const data = await getServerStatus(req.params.ip);
+    if (!data.online) {
+      return res.status(404).json({ error: 'Server offline' });
+    }
+
+    // Generate banner
+    const banner = await generateBanner(data);
+    res.type('webp').send(banner);
+  } catch (err) {
+    console.error('Banner error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
