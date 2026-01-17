@@ -118,6 +118,58 @@ setInterval(() => {
   cleanupOldFiles(ICON_DIR);
 }, 24 * 60 * 60 * 1000); // 24 hours
 
+async function getSystemMetrics() {
+  const memUsage = process.memoryUsage();
+  const cpus = os.cpus();
+  const loadAvg = os.loadavg();
+
+  // Calculate CPU usage (simplified)
+  const totalIdle = cpus.reduce((sum, cpu) => sum + cpu.times.idle, 0);
+  const totalTick = cpus.reduce((sum, cpu) => sum + Object.values(cpu.times).reduce((a, b) => a + b, 0), 0);
+  const cpuUsage = ((totalTick - totalIdle) / totalTick) * 100;
+
+  // Memory usage
+  const memoryUsage = {
+    rss: (memUsage.rss / 1024 / 1024).toFixed(2) + ' MB',
+    heapUsed: (memUsage.heapUsed / 1024 / 1024).toFixed(2) + ' MB',
+    heapTotal: (memUsage.heapTotal / 1024 / 1024).toFixed(2) + ' MB',
+    external: (memUsage.external / 1024 / 1024).toFixed(2) + ' MB'
+  };
+
+  // Storage usage (cache directory size)
+  let storageUsage = '0 MB';
+  try {
+    const cacheSize = await getDirectorySize(CACHE_DIR);
+    storageUsage = (cacheSize / 1024 / 1024).toFixed(2) + ' MB';
+  } catch {}
+
+  return {
+    memory: memoryUsage,
+    cpu: {
+      usage: cpuUsage.toFixed(2) + '%',
+      loadAverage: loadAvg.map(l => l.toFixed(2))
+    },
+    storage: storageUsage
+  };
+}
+
+async function getDirectorySize(dirPath) {
+  let totalSize = 0;
+  const files = await fs.readdir(dirPath, { withFileTypes: true });
+  for (const file of files) {
+    const filePath = path.join(dirPath, file.name);
+    if (file.isDirectory()) {
+      totalSize += await getDirectorySize(filePath);
+    } else {
+      const stat = await fs.stat(filePath);
+      totalSize += stat.size;
+    }
+  }
+  return totalSize;
+}
+
+// ======================
+// Core status function
 // ======================
 // Utils
 // ======================
