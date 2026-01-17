@@ -100,6 +100,7 @@ setInterval(() => {
   // Memory usage check - clear caches if heap usage is high
   const memUsage = process.memoryUsage();
   const heapThreshold = 100 * 1024 * 1024; // 100 MB
+  const cpuThreshold = 90; // 90%
   if (memUsage.heapUsed > heapThreshold) {
     console.log(`High memory usage detected (${(memUsage.heapUsed / 1024 / 1024).toFixed(2)} MB heap). Clearing memory caches.`);
     memoryCache.clear();
@@ -107,6 +108,18 @@ setInterval(() => {
     // Trigger garbage collection if available
     if (global.gc) {
       global.gc();
+    }
+
+    // Check again after clearing
+    const newMemUsage = process.memoryUsage();
+    const newCpus = os.cpus();
+    const newTotalIdle = newCpus.reduce((sum, cpu) => sum + cpu.times.idle, 0);
+    const newTotalTick = newCpus.reduce((sum, cpu) => sum + Object.values(cpu.times).reduce((a, b) => a + b, 0), 0);
+    const newCpuUsage = ((newTotalTick - newTotalIdle) / newTotalTick) * 100;
+
+    if (newMemUsage.heapUsed > heapThreshold || newCpuUsage > cpuThreshold) {
+      console.log(`Overload persists after cache clear. Memory: ${(newMemUsage.heapUsed / 1024 / 1024).toFixed(2)} MB, CPU: ${newCpuUsage.toFixed(2)}%. Auto-restarting...`);
+      process.exit(1);
     }
   }
 }, TTL);
@@ -334,67 +347,100 @@ refreshAllServers();
 
 // Health endpoint
 app.get("/", async (req, res) => {
-  const now = Date.now();
-  if (healthCache && now - healthCache.timestamp < HEALTH_TTL) {
-    return res.json(healthCache.data);
+  try {
+    const now = Date.now();
+    if (healthCache && now - healthCache.timestamp < HEALTH_TTL) {
+      return res.json(healthCache.data);
+    }
+
+    const metrics = await getSystemMetrics();
+    const avgResponseTime = responseTimes.length > 0
+      ? (responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length).toFixed(2) + ' ms'
+      : '0 ms';
+
+    const health = {
+      status: "healthy",
+      uptime: process.uptime().toFixed(2) + ' seconds',
+      responseTime: avgResponseTime,
+      requests: requestCount,
+      ...metrics
+    };
+
+    healthCache = { timestamp: now, data: health };
+    res.json(health);
+  } catch (err) {
+    console.error('Health endpoint error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
-
-  const metrics = await getSystemMetrics();
-  const avgResponseTime = responseTimes.length > 0
-    ? (responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length).toFixed(2) + ' ms'
-    : '0 ms';
-
-  const health = {
-    status: "healthy",
-    uptime: process.uptime().toFixed(2) + ' seconds',
-    responseTime: avgResponseTime,
-    requests: requestCount,
-    ...metrics
-  };
-
-  healthCache = { timestamp: now, data: health };
-  res.json(health);
 });
 
 // Bulk
 app.get("/api/server/status/bulk", async (req, res) => {
-  const list = req.query.servers;
-  if (!list) return res.status(400).json({ error: "No servers provided" });
+  try {
+    const list = req.query.servers;
+    if (!list) return res.status(400).json({ error: "No servers provided" });
 
-  const servers = list.split(",").map(s => s.trim()).filter(Boolean);
-  const results = {};
+    const servers = list.split(",").map(s => s.trim()).filter(Boolean);
+    const results = {};
 
-  await Promise.all(
-    servers.map(async (s) => {
-      let ip = s;
-      let port = 25565;
+    await Promise.all(
+      servers.map(async (s) => {
+        let ip = s;
+        let port = 25565;
 
-      if (s.includes(":")) {
-        const p = s.split(":");
-        ip = p[0];
-        port = parseInt(p[1]) || 25565;
-      }
+        if (s.includes(":")) {
+          const p = s.split(":");
+          ip = p[0];
+          port = parseInt(p[1]) || 25565;
+        }
 
-      results[`${ip}:${port}`] = await getServerStatus(ip, port);
-    })
-  );
+        results[`${ip}:${port}`] = await getServerStatus(ip, port);
+      })
+    );
 
-  res.json(results);
+    res.json(results);
+  } catch (err) {
+    console.error('Bulk status error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Single (with port)
 app.get("/api/server/status/:ip/:port", async (req, res) => {
-  const data = await getServerStatus(
-    req.params.ip,
-    parseInt(req.params.port)
-  );
-  res.status(data.online ? 200 : 404).json(data);
+  try {
+    const data = await getServerStatus(
+      req.params.ip,
+      parseInt(req.params.port)
+    );
+    res.status(data.online ? 200 : 404).json(data);
+  } catch (err) {
+    console.error('Single status with port error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Single (default port)
 app.get("/api/server/status/:ip", async (req, res) => {
-  const data = await getServerStatus(req.params.ip);
-  res.status(data.online ? 200 : 404).json(data);
+  try {
+    const data = await getServerStatus(req.params.ip);
+    res.status(data.online ? 200 : 404).json(data);
+  } catch (err) {
+    console.error('Single status error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ======================
+// Error handling and anti-crash
+// ======================
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
 });
 
 // ======================
