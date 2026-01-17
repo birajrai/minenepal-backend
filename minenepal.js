@@ -362,6 +362,7 @@ async function generateBanner(ip, port, data) {
   let motdHtml = data.motd.html.replace(/^<span>/, '').replace(/<\/span>$/, '').replace(/\n/g, ' ');
   let svgLine = motdHtml.replace(/<span style="color: ([^;]*); font-weight: bold">([^<]*)<\/span>/g, '<tspan style="fill: $1; font-weight: bold">$2</tspan>');
   svgLine = svgLine.replace(/<span style="color: ([^"]*)">([^<]*)<\/span>/g, '<tspan style="fill: $1">$2</tspan>');
+  svgLine = svgLine.replace(/&/g, '&amp;'); // Escape & in text
   svg += `<text x="${textX}" y="50" font-family="monospace" font-size="12" text-anchor="middle" xml:space="preserve">${svgLine}</text>`;
 
   // Ping (top right)
