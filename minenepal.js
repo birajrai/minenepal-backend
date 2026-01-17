@@ -84,6 +84,8 @@ const autoRefreshServers = [
 // ======================
 setInterval(() => {
   const now = Date.now();
+
+  // Standard TTL cleanup
   for (const [key, value] of memoryCache) {
     if (now - value.timestamp > TTL) {
       memoryCache.delete(key);
@@ -92,6 +94,19 @@ setInterval(() => {
   for (const [key, value] of dnsCache) {
     if (now - value.timestamp > TTL) {
       dnsCache.delete(key);
+    }
+  }
+
+  // Memory usage check - clear caches if heap usage is high
+  const memUsage = process.memoryUsage();
+  const heapThreshold = 100 * 1024 * 1024; // 100 MB
+  if (memUsage.heapUsed > heapThreshold) {
+    console.log(`High memory usage detected (${(memUsage.heapUsed / 1024 / 1024).toFixed(2)} MB heap). Clearing memory caches.`);
+    memoryCache.clear();
+    dnsCache.clear();
+    // Trigger garbage collection if available
+    if (global.gc) {
+      global.gc();
     }
   }
 }, TTL);
