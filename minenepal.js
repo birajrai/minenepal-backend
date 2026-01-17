@@ -346,17 +346,10 @@ async function generateBanner(data) {
   svg += `<defs><linearGradient id="grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" style="stop-color:#2c2f33;stop-opacity:1" /><stop offset="100%" style="stop-color:#1e2124;stop-opacity:1" /></linearGradient></defs>`;
   svg += `<rect width="100%" height="100%" fill="url(#grad)"/>`;
 
-  // Motd text (colored, multiline)
-  const motdHtml = data.motd.html;
-  const motdLines = motdHtml.split('\n');
-  let yPos = 25;
-  motdLines.forEach(line => {
-    if (line.trim()) {
-      const svgLine = line.replace(/<span style="color: ([^"]*)">([^<]*)<\/span>/g, '<tspan fill="$1">$2</tspan>');
-      svg += `<text x="${textX}" y="${yPos}" font-family="monospace" font-size="14" text-anchor="middle" xml:space="preserve">${svgLine}</text>`;
-      yPos += 18;
-    }
-  });
+  // Motd text (colored)
+  let motdHtml = data.motd.html.replace(/^<span>/, '').replace(/<\/span>$/, '').replace(/\n/g, ' ');
+  const svgLine = motdHtml.replace(/<span style="color: ([^"]*)">([^<]*)<\/span>/g, '<tspan fill="$1">$2</tspan>');
+  svg += `<text x="${textX}" y="35" font-family="monospace" font-size="14" text-anchor="middle" xml:space="preserve">${svgLine}</text>`;
 
   // Ping (top right)
   const pingText = `${data.ping}ms`;
