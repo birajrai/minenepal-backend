@@ -346,7 +346,7 @@ async function generateBanner(ip, port, data) {
     }
   } catch {}
 
-  const width = 600;
+  const width = 800;
   const height = 120;
   const iconSize = 64;
   const padding = 10;
@@ -362,19 +362,19 @@ async function generateBanner(ip, port, data) {
   let motdHtml = data.motd.html.replace(/^<span>/, '').replace(/<\/span>$/, '').replace(/\n/g, ' ');
   let svgLine = motdHtml.replace(/<span style="color: ([^;]*); font-weight: bold">([^<]*)<\/span>/g, '<tspan style="fill: $1; font-weight: bold">$2</tspan>');
   svgLine = svgLine.replace(/<span style="color: ([^"]*)">([^<]*)<\/span>/g, '<tspan style="fill: $1">$2</tspan>');
-  svg += `<text x="${textX}" y="35" font-family="monospace" font-size="14" text-anchor="middle" xml:space="preserve">${svgLine}</text>`;
+  svg += `<text x="${textX}" y="35" font-family="monospace" font-size="12" text-anchor="middle" xml:space="preserve">${svgLine}</text>`;
 
   // Ping (top right)
   const pingText = `${data.ping}ms`;
-  svg += `<text x="${width - padding}" y="25" fill="#00ff00" font-family="Arial, sans-serif" font-size="14" text-anchor="end">${pingText}</text>`;
+  svg += `<text x="${width - padding}" y="25" fill="#00ff00" font-family="Arial, sans-serif" font-size="12" text-anchor="end">${pingText}</text>`;
 
   // Players (below motd)
   const playersText = `${data.players.online}/${data.players.max} players`;
-  svg += `<text x="${textX}" y="65" fill="#cccccc" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">${playersText}</text>`;
+  svg += `<text x="${textX}" y="65" fill="#cccccc" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">${playersText}</text>`;
 
   // Version (bottom)
   const versionText = data.version.substring(0, 30);
-  svg += `<text x="${textX}" y="90" fill="#aaaaaa" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">${versionText}</text>`;
+  svg += `<text x="${textX}" y="90" fill="#aaaaaa" font-family="Arial, sans-serif" font-size="10" text-anchor="middle">${versionText}</text>`;
 
   svg += '</svg>';
 
