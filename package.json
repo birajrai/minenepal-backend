@@ -7,6 +7,7 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "compression": "^1.7.4",
     "cors": "^2.8.5",
     "express": "^4.18.3",
     "minecraft-server-util": "^5.4.4",

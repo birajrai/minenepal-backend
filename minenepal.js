@@ -3,9 +3,11 @@
 
 const express = require("express");
 const cors = require("cors");
+const compression = require("compression");
 const path = require("path");
 const dns = require("dns").promises;
 const fs = require("fs/promises");
+const crypto = require("crypto");
 const { status } = require("minecraft-server-util");
 const sharp = require("sharp");
 const os = require("os");
@@ -25,6 +27,7 @@ const HEALTH_TTL = 5000; // 5 seconds
 // ======================
 // Middleware
 // ======================
+app.use(compression());
 app.use(cors());
 app.use(express.json());
 app.disable("x-powered-by");
@@ -32,9 +35,10 @@ app.set("trust proxy", true);
 
 // Metrics middleware
 app.use((req, res, next) => {
-  const start = Date.now();
+  const start = process.hrtime.bigint();
   res.on('finish', () => {
-    const duration = Date.now() - start;
+    const end = process.hrtime.bigint();
+    const duration = Number(end - start) / 1000000; // to ms
     requestCount++;
     responseTimes.push(duration);
     if (responseTimes.length > MAX_RESPONSE_TIMES) {
@@ -58,6 +62,7 @@ app.use("/icons", express.static(ICON_DIR));
 // Memory Cache
 // ======================
 const memoryCache = new Map();
+const dnsCache = new Map();
 
 // ======================
 // Auto-refresh servers
@@ -85,7 +90,34 @@ setInterval(() => {
       memoryCache.delete(key);
     }
   }
+  for (const [key, value] of dnsCache) {
+    if (now - value.timestamp > TTL) {
+      dnsCache.delete(key);
+    }
+  }
 }, TTL);
+
+// File cache cleanup (every hour)
+async function cleanupOldFiles(dir, maxAge = 24 * 60 * 60 * 1000) { // 24 hours
+  try {
+    const files = await fs.readdir(dir);
+    const now = Date.now();
+    for (const file of files) {
+      const filePath = path.join(dir, file);
+      try {
+        const stat = await fs.stat(filePath);
+        if (now - stat.mtime.getTime() > maxAge) {
+          await fs.unlink(filePath);
+        }
+      } catch {} // Ignore errors for individual files
+    }
+  } catch {} // Ignore directory errors
+}
+
+setInterval(() => {
+  cleanupOldFiles(CACHE_DIR);
+  cleanupOldFiles(ICON_DIR);
+}, 24 * 60 * 60 * 1000); // 24 hours
 
 // ======================
 // Utils
@@ -196,8 +228,15 @@ async function getServerStatus(ip, port = 25565) {
 
     let raw_ip = null;
     try {
-      const lookup = await dns.lookup(res.host || ip);
-      raw_ip = lookup.address;
+      const host = res.host || ip;
+      let cached = dnsCache.get(host);
+      if (cached && Date.now() - cached.timestamp < TTL) {
+        raw_ip = cached.address;
+      } else {
+        const lookup = await dns.lookup(host);
+        raw_ip = lookup.address;
+        dnsCache.set(host, { address: raw_ip, timestamp: Date.now() });
+      }
     } catch {}
 
     let icon = null;
