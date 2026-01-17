@@ -354,14 +354,14 @@ async function generateBanner(ip, port, data) {
 
   let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`;
 
-  // Background with gradient
-  svg += `<defs><linearGradient id="grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" style="stop-color:#2c2f33;stop-opacity:1" /><stop offset="100%" style="stop-color:#1e2124;stop-opacity:1" /></linearGradient></defs>`;
+  // Background with dirt gradient
+  svg += `<defs><linearGradient id="grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" style="stop-color:#8B4513;stop-opacity:1" /><stop offset="100%" style="stop-color:#654321;stop-opacity:1" /></linearGradient></defs>`;
   svg += `<rect width="100%" height="100%" fill="url(#grad)"/>`;
 
   // Motd text (colored and styled)
   let motdHtml = data.motd.html.replace(/^<span>/, '').replace(/<\/span>$/, '').replace(/\n/g, ' ');
-  let svgLine = motdHtml.replace(/<span style="color: ([^;]*); font-weight: bold">([^<]*)<\/span>/g, '<tspan fill="$1" font-weight="bold">$2</tspan>');
-  svgLine = svgLine.replace(/<span style="color: ([^"]*)">([^<]*)<\/span>/g, '<tspan fill="$1">$2</tspan>');
+  let svgLine = motdHtml.replace(/<span style="color: ([^;]*); font-weight: bold">([^<]*)<\/span>/g, '<tspan style="fill: $1; font-weight: bold">$2</tspan>');
+  svgLine = svgLine.replace(/<span style="color: ([^"]*)">([^<]*)<\/span>/g, '<tspan style="fill: $1">$2</tspan>');
   svg += `<text x="${textX}" y="35" font-family="monospace" font-size="14" text-anchor="middle" xml:space="preserve">${svgLine}</text>`;
 
   // Ping (top right)
