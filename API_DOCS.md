@@ -265,12 +265,5 @@ node minenepal.js
 
 The server will start on port 10000 by default.
 
-## Auto-Refresh
-
-The API automatically refreshes status for predefined popular servers:
-- play.hypixel.net
-- play.craftnepal.com
-- mcnpnetwork.com
-
-This ensures these servers' data is always fresh in the cache.</content>
+</content>
 <parameter name="filePath">/home/biraj/Projects/minenepal_codebase/minenepal-server-status/API_DOCS.md
