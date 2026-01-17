@@ -10,6 +10,7 @@ const fs = require("fs/promises");
 const { status } = require("minecraft-server-util");
 const sharp = require("sharp");
 const os = require("os");
+const he = require("he");
 
 const app = express();
 const PORT = 10000;
@@ -287,7 +288,7 @@ async function getServerStatus(ip, port = 25565) {
       },
       motd: {
         raw: res.motd.raw,
-        html: res.motd.html
+        html: he.decode(res.motd.html)
       },
       icon
     };
