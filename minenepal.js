@@ -275,10 +275,10 @@ async function getServerStatus(ip, port = 25565) {
 
     const data = {
       online: true,
-      ip,
       host: res.host || ip,
-      raw_ip,
+      ip,
       port: res.port || port,
+      raw_ip,
       ping: res.roundTripLatency,
       version: res.version.name,
       players: {
@@ -301,10 +301,10 @@ async function getServerStatus(ip, port = 25565) {
   } catch {
     const offline = {
       online: false,
-      ip,
       host: ip,
-      raw_ip: null,
+      ip,
       port,
+      raw_ip: null,
       ping: null,
       error: "Server offline or unreachable",
       icon: null
@@ -398,7 +398,14 @@ app.get("/api/server/status/bulk", async (req, res) => {
       })
     );
 
-    res.json(results);
+    // Sort results by key (ip:port)
+    const sortedKeys = Object.keys(results).sort();
+    const sortedResults = {};
+    for (const key of sortedKeys) {
+      sortedResults[key] = results[key];
+    }
+
+    res.json(sortedResults);
   } catch (err) {
     console.error('Bulk status error:', err);
     res.status(500).json({ error: 'Internal server error' });
