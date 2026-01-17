@@ -65,14 +65,7 @@ app.use("/icons", express.static(ICON_DIR));
 const memoryCache = new Map();
 const dnsCache = new Map();
 
-// ======================
-// Auto-refresh servers
-// ======================
-const autoRefreshServers = [
-  "play.hypixel.net",
-  "play.craftnepal.com",
-  "mcnpnetwork.com"
-];
+
 
 // ======================
 // Init directories
@@ -394,28 +387,7 @@ async function generateBanner(ip, port, data) {
   return buffer;
 }
 
-// ======================
-// Auto refresh loop
-// ======================
-async function refreshAllServers() {
-  for (let s of autoRefreshServers) {
-    let ip = s;
-    let port = 25565;
 
-    if (s.includes(":")) {
-      const p = s.split(":");
-      ip = p[0];
-      port = parseInt(p[1]) || 25565;
-    }
-
-    try {
-      await getServerStatus(ip, port);
-    } catch {}
-  }
-}
-
-setInterval(refreshAllServers, TTL);
-refreshAllServers();
 
 // ======================
 // Routes
