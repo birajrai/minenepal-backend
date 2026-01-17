@@ -271,7 +271,21 @@ async function getServerStatus(ip, port = 25565) {
 
     let icon = null;
     if (res.favicon) {
-      icon = await saveIcon(res.favicon, ip, res.port || port);
+      const iconPath = iconFile(ip, port);
+      try {
+        const stat = await fs.stat(iconPath);
+        const now = Date.now();
+        const age = now - stat.mtime.getTime();
+        const cooldown = 14 * 24 * 60 * 60 * 1000; // 14 days in ms
+        if (age < cooldown) {
+          icon = `/icons/${path.basename(iconPath)}`;
+        } else {
+          icon = await saveIcon(res.favicon, ip, port);
+        }
+      } catch {
+        // File doesn't exist, generate
+        icon = await saveIcon(res.favicon, ip, port);
+      }
     }
 
     const data = {
@@ -287,6 +301,7 @@ async function getServerStatus(ip, port = 25565) {
         max: res.players.max
       },
       motd: {
+        clean: res.motd.clean,
         raw: res.motd.raw,
         html: he.decode(res.motd.html)
       },
