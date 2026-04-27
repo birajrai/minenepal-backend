@@ -42,14 +42,14 @@ func (h *BannerHandler) GetBanner(c *fiber.Ctx) error {
 		})
 	}
 
-	bannerData, err := h.bannerService.GetBanner(ip, port, status)
+	bannerData, err := h.bannerService.GenerateBanner(status)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
 
-	c.Set("Content-Type", "image/png")
+	c.Set("Content-Type", "image/svg+xml")
 	c.Set("Cache-Control", "public, max-age=86400")
 
 	return c.Send(bannerData)

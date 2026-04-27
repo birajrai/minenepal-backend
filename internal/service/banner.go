@@ -1,12 +1,10 @@
 package service
 
 import (
-	"bytes"
-	"image"
-	"image/color"
-	"image/png"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"minenepal-backend/pkg/types"
@@ -25,18 +23,56 @@ func NewBannerService(cache *CacheService, bannerCacheTTL time.Duration) *Banner
 }
 
 func (b *BannerService) GenerateBanner(status *types.ServerStatus) ([]byte, error) {
-	img := image.NewRGBA(image.Rect(0, 0, 800, 120))
+	width := 800
+	height := 120
+	iconSize := 64
+	padding := 10
 
-	for y := 0; y < 120; y++ {
-		for x := 0; x < 800; x++ {
-			img.Set(x, y, color.RGBA{139, 69, 19, 255})
+	var svg strings.Builder
+
+	svg.WriteString(fmt.Sprintf(`<svg width="%d" height="%d" xmlns="http://www.w3.org/2000/svg">`, width, height))
+
+	svg.WriteString(`<defs><linearGradient id="grad" x1="0%" y1="0%" x2="0%" y2="100%">`)
+	svg.WriteString(`<stop offset="0%" style="stop-color:#8B4513;stop-opacity:1" />`)
+	svg.WriteString(`<stop offset="100%" style="stop-color:#654321;stop-opacity:1" />`)
+	svg.WriteString(`</linearGradient></defs>`)
+	svg.WriteString(`<rect width="100%" height="100%" fill="url(#grad)"/>`)
+
+	motdText := status.MOTD.Clean
+	if motdText == "" {
+		motdText = status.Host
+	}
+	motdText = strings.ReplaceAll(motdText, "\n", " ")
+	motdText = escapeXML(motdText)
+
+	textX := iconSize + padding*2
+
+	svg.WriteString(fmt.Sprintf(`<text x="%d" y="50" font-family="Arial" font-size="14" fill="white">%s</text>`, textX, motdText))
+
+	if status.Ping > 0 {
+		pingColor := "#00ff00"
+		if status.Ping > 200 {
+			pingColor = "#ffff00"
+		} else if status.Ping > 500 {
+			pingColor = "#ff0000"
 		}
+		svg.WriteString(fmt.Sprintf(`<text x="%d" y="25" fill="%s" font-family="Arial" font-size="12" text-anchor="end">%dms</text>`, width-padding, pingColor, status.Ping))
 	}
 
-	var buf bytes.Buffer
-	png.Encode(&buf, img)
+	playersText := fmt.Sprintf("%d/%d players", status.Players.Online, status.Players.Max)
+	svg.WriteString(fmt.Sprintf(`<text x="%d" y="80" fill="#cccccc" font-family="Arial" font-size="12">%s</text>`, textX, playersText))
 
-	return buf.Bytes(), nil
+	if status.Version != "" {
+		versionText := status.Version
+		if len(versionText) > 30 {
+			versionText = versionText[:30] + "..."
+		}
+		svg.WriteString(fmt.Sprintf(`<text x="%d" y="100" fill="#aaaaaa" font-family="Arial" font-size="10">%s</text>`, textX, escapeXML(versionText)))
+	}
+
+	svg.WriteString(`</svg>`)
+
+	return []byte(svg.String()), nil
 }
 
 func (b *BannerService) GetBanner(ip string, port int, status *types.ServerStatus) ([]byte, error) {
@@ -60,4 +96,12 @@ func (b *BannerService) GetBanner(ip string, port int, status *types.ServerStatu
 
 func (b *BannerService) GetBannerPath() string {
 	return filepath.Join(b.cache.cacheDir, "banners")
+}
+
+func escapeXML(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, "\"", "&quot;")
+	return s
 }
