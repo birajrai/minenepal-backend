@@ -103,15 +103,20 @@ func (s *ServerService) queryServer(ip string, port int) (*types.ServerStatus, e
 		return nil, err
 	}
 
+	conn.SetReadDeadline(time.Now().Add(s.queryTimeout))
+
+	_, err = s.readPacketWithID(conn)
+	if err != nil {
+		return nil, err
+	}
+
 	statusReq := s.createStatusRequest()
 	_, err = conn.Write(statusReq)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := conn.SetReadDeadline(time.Now().Add(s.queryTimeout)); err != nil {
-		return nil, err
-	}
+	conn.SetReadDeadline(time.Now().Add(s.queryTimeout))
 
 	response, err := s.readStatusResponse(conn)
 	if err != nil {
@@ -125,6 +130,53 @@ func (s *ServerService) queryServer(ip string, port int) (*types.ServerStatus, e
 	}
 
 	return status, nil
+}
+
+func (s *ServerService) createHandshake(host string, port int) []byte {
+	var buf bytes.Buffer
+	buf.WriteByte(0x00)
+	buf.Write(encodeVarint(47))
+	buf.Write([]byte(host))
+	buf.Write(encodeVarint(int32(port)))
+	buf.Write(encodeVarint(1))
+	return s.createPacketVarint(0, &buf)
+}
+
+func (s *ServerService) createStatusRequest() []byte {
+	var buf bytes.Buffer
+	buf.WriteByte(0x00)
+	return s.createPacketVarint(0, &buf)
+}
+
+func (s *ServerService) createPacketVarint(id int, buf *bytes.Buffer) []byte {
+	var result bytes.Buffer
+	data := buf.Bytes()
+	result.Write(encodeVarint(int32(len(data))))
+	result.Write(encodeVarint(int32(id)))
+	result.Write(data)
+	return result.Bytes()
+}
+
+func (s *ServerService) readPacketWithID(conn net.Conn) ([]byte, error) {
+	lengthBuf := make([]byte, 3)
+	n, err := conn.Read(lengthBuf)
+	if err != nil || n == 0 {
+		return nil, err
+	}
+
+	r := bytes.NewReader(lengthBuf)
+	length := decodeVarint(r)
+	if length <= 0 || length > 65536 {
+		return nil, fmt.Errorf("invalid length")
+	}
+
+	data := make([]byte, length)
+	_, err = io.ReadFull(conn, data)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
 }
 
 func (s *ServerService) createHandshake(host string, port int) []byte {
@@ -166,44 +218,6 @@ func (s *ServerService) readStatusResponse(conn net.Conn) ([]byte, error) {
 	}
 
 	return data[3:], nil
-}
-	}
-
-	_ = s.lookupIP(host)
-
-	start := time.Now()
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, port), s.queryTimeout)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-	ping := int(time.Since(start).Milliseconds())
-
-	if err := conn.SetReadDeadline(time.Now().Add(s.queryTimeout)); err != nil {
-		return nil, err
-	}
-
-	_, err = s.handshake(host, port, conn)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := conn.SetReadDeadline(time.Now().Add(s.queryTimeout)); err != nil {
-		return nil, err
-	}
-
-	response := s.readResponse(conn)
-	if response == nil {
-		return nil, fmt.Errorf("no response from server")
-	}
-
-	status := s.parseResponse(ip, port, host, ping, response)
-
-	if icon := s.handleIcon(ip, port, response); icon != "" {
-		status.Icon = icon
-	}
-
-	return status, nil
 }
 
 func isHostname(s string) bool {
