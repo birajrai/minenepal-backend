@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -27,10 +28,8 @@ func (h *StatusHandler) GetStatus(c *fiber.Ctx) error {
 
 	port := 25565
 	if c.Params("port") != "" {
-		if _, err := c.ParamsInt("port"); err != nil {
-			port = 25565
-		} else {
-			port = c.ParamsInt("port")
+		if p, err := strconv.Atoi(c.Params("port")); err == nil {
+			port = p
 		}
 	}
 

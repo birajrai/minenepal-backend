@@ -7,15 +7,14 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/rs/zerolog/log"
+	"minenepal-backend/internal/stats"
 	"minenepal-backend/pkg/types"
 )
 
 var (
-	requestCount   int64
-	startTime      = time.Now()
 	healthCache    *healthCacheEntry
 	healthCacheTTL = 5 * time.Second
+	startTime      = time.Now()
 )
 
 type healthCacheEntry struct {
@@ -38,13 +37,12 @@ func (h *HealthHandler) Health() fiber.Handler {
 		}
 
 		metrics := getSystemMetrics()
-		avgResponseTime := "0 ms"
 
 		response := &types.HealthResponse{
 			Status:       "healthy",
 			Uptime:       fmt.Sprintf("%.2f seconds", time.Since(startTime).Seconds()),
-			ResponseTime: avgResponseTime,
-			Requests:     atomic.LoadInt64(&requestCount),
+			ResponseTime: "0 ms",
+			Requests:     atomic.LoadInt64(&stats.RequestCount),
 			Memory:       metrics.Memory,
 			CPU:          metrics.CPU,
 			Storage:      metrics.Storage,
@@ -80,18 +78,6 @@ func getSystemMetrics() metricsData {
 			Usage:       "0%",
 			LoadAverage: []string{"0", "0", "0"},
 		},
-		Storage: getCacheDirSize(),
+		Storage: "0 MB",
 	}
-}
-
-func getCacheDirSize() string {
-	return "0 MB"
-}
-
-func IncrementRequestCount() {
-	atomic.AddInt64(&requestCount, 1)
-}
-
-func GetRequestCount() int64 {
-	return atomic.LoadInt64(&requestCount)
 }

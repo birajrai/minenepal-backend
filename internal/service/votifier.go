@@ -42,7 +42,7 @@ func (v *VotifierService) sendV1(req *types.VoteRequest) error {
 		return fmt.Errorf("votifier v1 requires public key")
 	}
 
-	publicKey, err := parsePublicKey(req.VotifierToken)
+	publicKey, err := parseRSAPublicKey(req.VotifierToken)
 	if err != nil {
 		return fmt.Errorf("invalid public key: %w", err)
 	}
@@ -137,11 +137,11 @@ func (v *VotifierService) sendV2(req *types.VoteRequest) error {
 	timestamp := time.Now().UnixMilli()
 
 	payloadData := map[string]interface{}{
-		"username":     req.Username,
-		"serviceName":  serviceName,
-		"timestamp":    timestamp,
-		"address":      req.IPAddress,
-		"challenge":    challenge,
+		"username":    req.Username,
+		"serviceName": serviceName,
+		"timestamp":   timestamp,
+		"address":     req.IPAddress,
+		"challenge":   challenge,
 	}
 
 	jsonPayload, err := json.Marshal(payloadData)
@@ -188,28 +188,26 @@ func (v *VotifierService) sendV2(req *types.VoteRequest) error {
 	return fmt.Errorf("votifier server error: %s", responseRaw)
 }
 
-func parsePublicKey(keyData string) (*rsa.PublicKey, error) {
+func parseRSAPublicKey(keyData string) (*rsa.PublicKey, error) {
 	keyData = strings.ReplaceAll(keyData, "\n", "")
 	keyData = strings.ReplaceAll(keyData, "\r", "")
 	keyData = strings.ReplaceAll(keyData, "-----BEGIN PUBLIC KEY-----", "")
 	keyData = strings.ReplaceAll(keyData, "-----END PUBLIC KEY-----", "")
-
-	keyData = strings.TrimSpace(keyData)
-
-	block, _ := pem.Decode([]byte(keyData))
-	if block != nil {
-		keyData = string(block.Bytes)
-	}
-
 	keyData = strings.TrimSpace(keyData)
 
 	paddedKey := "-----BEGIN PUBLIC KEY-----\n"
-	paddedKey += insertNewlines(keyData, 64)
-	paddedKey += "\n-----END PUBLIC KEY-----"
+	for i := 0; i < len(keyData); i += 64 {
+		end := i + 64
+		if end > len(keyData) {
+			end = len(keyData)
+		}
+		paddedKey += keyData[i:end] + "\n"
+	}
+	paddedKey += "-----END PUBLIC KEY-----"
 
-	block, err := pem.Decode([]byte(paddedKey))
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode PEM: %w", err)
+	block, _ := pem.Decode([]byte(paddedKey))
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode PEM block")
 	}
 
 	pubInterface, err := x509.ParsePKIXPublicKey(block.Bytes)
@@ -223,17 +221,6 @@ func parsePublicKey(keyData string) (*rsa.PublicKey, error) {
 	}
 
 	return pubKey, nil
-}
-
-func insertNewlines(s string, every int) string {
-	var result strings.Builder
-	for i, r := range s {
-		if i > 0 && i%every == 0 {
-			result.WriteRune('\n')
-		}
-		result.WriteRune(r)
-	}
-	return result.String()
 }
 
 func computeHMAC(data []byte, key string) string {

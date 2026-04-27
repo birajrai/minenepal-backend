@@ -20,7 +20,8 @@ import (
 	"minenepal-backend/internal/handler"
 	"minenepal-backend/internal/middleware"
 	"minenepal-backend/internal/service"
-	"minenepal-backend/internal/websocket"
+	"minenepal-backend/internal/stats"
+	ws "minenepal-backend/internal/websocket"
 )
 
 var (
@@ -56,7 +57,7 @@ func main() {
 	votifierService := service.NewVotifierService(cfg.VotifierTimeout)
 	bannerService := service.NewBannerService(cache, cfg.BannerCacheTTL)
 
-	hub := websocket.NewHub(log.With().Str("component", "websocket").Logger())
+	hub := ws.NewHub(log.With().Str("component", "websocket").Logger())
 
 	go hub.Run()
 
@@ -68,10 +69,10 @@ func main() {
 	metricsHandler := handler.NewMetricsHandler()
 
 	app := fiber.New(fiber.Config{
-		AppName:      "MineNepal Backend",
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		AppName:               "MineNepal Backend",
+		ReadTimeout:           10 * time.Second,
+		WriteTimeout:          10 * time.Second,
+		IdleTimeout:          120 * time.Second,
 		DisableStartupMessage: false,
 	})
 
@@ -85,7 +86,7 @@ func main() {
 	app.Use(middleware.CORS())
 
 	app.Use(func(c *fiber.Ctx) error {
-		handler.IncrementRequestCount()
+		stats.IncrementRequestCount()
 		return c.Next()
 	})
 
@@ -105,24 +106,25 @@ func main() {
 
 	api.Post("/vote", voteHandler.SendVote)
 
-	app.Use("/icons", fiber.Static(cache.GetIconURL("", 0)))
-	app.Use("/banners", fiber.Static(bannerService.GetBannerPath()))
+	app.Static("/icons", cache.GetCacheDir()+"/icons")
+	app.Static("/banners", bannerService.GetBannerPath())
 
-	app.Get("/ws", websocket.New(hub, websocket.Config{
-		CheckOrigin: func(r *fiber.Ctx) bool {
-			return true
-		},
-	}), wsHandler.Upgrade)
-	app.Use("/ws", websocket.New(hub, websocket.Config{
-		CheckOrigin: func(r *fiber.Ctx) bool {
-			return true
-		},
-	}), func(c *fiber.Ctx) error {
+	app.Use("/ws", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
-			return wsHandler.Handle(c.Context().websocket)
+			c.Locals("allowed", true)
+			c.Locals("hub", hub)
+			return c.Next()
 		}
 		return fiber.ErrUpgradeRequired
 	})
+
+	app.Get("/ws", wsHandler.Upgrade)
+	app.Get("/ws/:ip/:port", wsHandler.Upgrade)
+	app.Get("/ws/:ip", wsHandler.Upgrade)
+
+	app.ws("/ws", wsHandler.Handle)
+	app.ws("/ws/:ip/:port", wsHandler.Handle)
+	app.ws("/ws/:ip", wsHandler.Handle)
 
 	go func() {
 		if err := app.Listen(cfg.Host + ":" + cfg.Port); err != nil {

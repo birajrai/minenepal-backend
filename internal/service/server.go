@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -87,7 +88,7 @@ func (s *ServerService) queryServer(ip string, port int) (*types.ServerStatus, e
 		}
 	}
 
-	rawIP := s.lookupIP(host)
+	_ = s.lookupIP(host)
 
 	start := time.Now()
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, port), s.queryTimeout)
@@ -133,7 +134,7 @@ func isHostname(s string) bool {
 
 func (s *ServerService) lookupSRV(host string, defaultPort int) string {
 	srvHost := fmt.Sprintf("_minecraft._tcp.%s", host)
-	records, err := net.LookupSRV("", "", srvHost)
+	_, records, err := net.LookupSRV("", "", srvHost)
 	if err != nil || len(records) == 0 {
 		return ""
 	}
@@ -347,15 +348,14 @@ func formatMOTDHTML(raw string) string {
 			} else if code == "o" {
 				style = "font-style: italic;"
 			}
-			color := ""
 			return fmt.Sprintf(`<span style="%s">%s</span>`, style, text)
 		}
 
-		color, ok := colorMap[code]
+		colorVal, ok := colorMap[code]
 		if !ok {
 			return text
 		}
-		return fmt.Sprintf(`<span style="color: %s">%s</span>`, color, text)
+		return fmt.Sprintf(`<span style="color: %s">%s</span>`, colorVal, text)
 	})
 }
 

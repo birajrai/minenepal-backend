@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -29,7 +30,9 @@ func (h *BannerHandler) GetBanner(c *fiber.Ctx) error {
 
 	port := 25565
 	if c.Params("port") != "" {
-		port = c.ParamsInt("port")
+		if p, err := strconv.Atoi(c.Params("port")); err == nil {
+			port = p
+		}
 	}
 
 	status, err := h.serverService.GetStatus(ip, port)
@@ -62,7 +65,9 @@ func (h *BannerHandler) GetBannerSVG(c *fiber.Ctx) error {
 
 	port := 25565
 	if c.Params("port") != "" {
-		port = c.ParamsInt("port")
+		if p, err := strconv.Atoi(c.Params("port")); err == nil {
+			port = p
+		}
 	}
 
 	status, err := h.serverService.GetStatus(ip, port)

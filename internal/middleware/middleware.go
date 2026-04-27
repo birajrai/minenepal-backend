@@ -1,10 +1,9 @@
 package middleware
 
 import (
-	"time"
-
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog/log"
+	"time"
 )
 
 func RequestLogger() fiber.Handler {
@@ -12,6 +11,9 @@ func RequestLogger() fiber.Handler {
 		start := time.Now()
 
 		err := c.Next()
+		if err != nil {
+			return err
+		}
 
 		duration := time.Since(start)
 		log.Debug().
@@ -20,6 +22,8 @@ func RequestLogger() fiber.Handler {
 			Int("status", c.Response().StatusCode()).
 			Dur("duration", duration).
 			Msg("request")
+
+		return nil
 	}
 }
 

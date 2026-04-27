@@ -6,15 +6,16 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
-	"minenepal-backend/internal/websocket"
+
+	ws "minenepal-backend/internal/websocket"
 	"minenepal-backend/pkg/types"
 )
 
 type WebSocketHandler struct {
-	hub *websocket.Hub
+	hub *ws.Hub
 }
 
-func NewWebSocketHandler(hub *websocket.Hub) *WebSocketHandler {
+func NewWebSocketHandler(hub *ws.Hub) *WebSocketHandler {
 	return &WebSocketHandler{
 		hub: hub,
 	}
@@ -28,7 +29,7 @@ func (h *WebSocketHandler) Upgrade(c *fiber.Ctx) error {
 }
 
 func (h *WebSocketHandler) Handle(c *websocket.Conn) {
-	client := &websocket.Client{
+	client := &ws.Client{
 		Conn:          c,
 		Subscriptions: make(map[string]bool),
 	}
@@ -49,10 +50,10 @@ func (h *WebSocketHandler) Handle(c *websocket.Conn) {
 	}
 }
 
-func (h *WebSocketHandler) handleMessage(client *websocket.Client, msg []byte) {
+func (h *WebSocketHandler) handleMessage(client *ws.Client, msg []byte) {
 	var sub types.WSSubscription
 	if err := json.Unmarshal(msg, &sub); err != nil {
-		h.sendError(client, "Invalid message format")
+		h.sendError(client.Conn, "Invalid message format")
 		return
 	}
 
@@ -60,26 +61,26 @@ func (h *WebSocketHandler) handleMessage(client *websocket.Client, msg []byte) {
 	case "subscribe":
 		if len(sub.Servers) > 0 {
 			h.hub.Subscribe(client, sub.Servers)
-			h.sendAck(client, "subscribed", sub.Servers)
+			h.sendAck(client.Conn, "subscribed", sub.Servers)
 		} else {
-			h.sendError(client, "No servers specified")
+			h.sendError(client.Conn, "No servers specified")
 		}
 
 	case "unsubscribe":
 		if len(sub.Servers) > 0 {
 			h.hub.Unsubscribe(client, sub.Servers)
-			h.sendAck(client, "unsubscribed", sub.Servers)
+			h.sendAck(client.Conn, "unsubscribed", sub.Servers)
 		} else {
 			h.hub.Unsubscribe(client, h.hub.GetSubscriptions(client))
-			h.sendAck(client, "unsubscribed all", nil)
+			h.sendAck(client.Conn, "unsubscribed all", nil)
 		}
 
 	default:
-		h.sendError(client, "Unknown action: "+sub.Action)
+		h.sendError(client.Conn, "Unknown action: "+sub.Action)
 	}
 }
 
-func (h *WebSocketHandler) sendError(client *websocket.Client, message string) {
+func (h *WebSocketHandler) sendError(conn *websocket.Conn, message string) {
 	msg := types.WSMessage{
 		Type: "error",
 		Data: map[string]string{
@@ -87,10 +88,10 @@ func (h *WebSocketHandler) sendError(client *websocket.Client, message string) {
 		},
 	}
 	data, _ := json.Marshal(msg)
-	client.Conn.WriteMessage(websocket.TextMessage, data)
+	conn.WriteMessage(websocket.TextMessage, data)
 }
 
-func (h *WebSocketHandler) sendAck(client *websocket.Client, action string, servers []string) {
+func (h *WebSocketHandler) sendAck(conn *websocket.Conn, action string, servers []string) {
 	msg := types.WSMessage{
 		Type: "ack",
 		Data: map[string]interface{}{
@@ -99,5 +100,5 @@ func (h *WebSocketHandler) sendAck(client *websocket.Client, action string, serv
 		},
 	}
 	data, _ := json.Marshal(msg)
-	client.Conn.WriteMessage(websocket.TextMessage, data)
+	conn.WriteMessage(websocket.TextMessage, data)
 }

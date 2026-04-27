@@ -159,3 +159,7 @@ func (c *CacheService) Cleanup() {
 		}
 	}
 }
+
+func (c *CacheService) GetCacheDir() string {
+	return c.cacheDir
+}
