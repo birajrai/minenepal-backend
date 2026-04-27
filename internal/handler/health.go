@@ -38,10 +38,16 @@ func (h *HealthHandler) Health() fiber.Handler {
 
 		metrics := getSystemMetrics()
 
+		avgResponseTime := stats.GetAverageResponseTime()
+		responseTime := "0 ms"
+		if avgResponseTime > 0 {
+			responseTime = fmt.Sprintf("%.2f ms", avgResponseTime)
+		}
+
 		response := &types.HealthResponse{
 			Status:       "healthy",
 			Uptime:       fmt.Sprintf("%.2f seconds", time.Since(startTime).Seconds()),
-			ResponseTime: "0 ms",
+			ResponseTime: responseTime,
 			Requests:     atomic.LoadInt64(&stats.RequestCount),
 			Memory:       metrics.Memory,
 			CPU:          metrics.CPU,

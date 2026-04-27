@@ -3,6 +3,7 @@ package middleware
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog/log"
+	"minenepal-backend/internal/stats"
 	"time"
 )
 
@@ -16,6 +17,9 @@ func RequestLogger() fiber.Handler {
 		}
 
 		duration := time.Since(start)
+		durationMs := float64(duration.Milliseconds())
+		stats.RecordResponseTime(durationMs)
+
 		log.Debug().
 			Str("method", c.Method()).
 			Str("path", c.Path()).
