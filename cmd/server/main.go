@@ -97,9 +97,9 @@ func main() {
 
 	serverGroup := api.Group("/server")
 
+	serverGroup.Get("/status/bulk", statusHandler.GetStatusBulk)
 	serverGroup.Get("/status/:ip", statusHandler.GetStatus)
 	serverGroup.Get("/status/:ip/:port", statusHandler.GetStatus)
-	serverGroup.Get("/status/bulk", statusHandler.GetStatusBulk)
 
 	serverGroup.Get("/banner/:ip", bannerHandler.GetBanner)
 	serverGroup.Get("/banner/:ip/:port", bannerHandler.GetBanner)

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/iverly/go-mcping/mcping"
 	"minenepal-backend/pkg/types"
 )
 
@@ -87,49 +88,57 @@ func (s *ServerService) queryServer(ip string, port int) (*types.ServerStatus, e
 		}
 	}
 
-	_ = s.lookupIP(host)
-
 	start := time.Now()
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, port), s.queryTimeout)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
+	pinger := mcping.NewPinger()
+	response, err := pinger.Ping(host, uint16(port))
 	ping := int(time.Since(start).Milliseconds())
 
-	handshake := s.createHandshake(host, port)
-	_, err = conn.Write(handshake)
 	if err != nil {
-		return nil, err
+		return s.offlineStatus(ip, port, err.Error()), nil
 	}
 
-	conn.SetReadDeadline(time.Now().Add(s.queryTimeout))
-
-	_, err = s.readPacketWithID(conn)
-	if err != nil {
-		return nil, err
+	status := &types.ServerStatus{
+		Online:  true,
+		Host:   host,
+		IP:    ip,
+		Port:   port,
+		Ping:  ping,
+		MOTD:  types.MOTD{},
 	}
+	status.Version = response.Version
+	status.Players.Online = response.PlayerCount.Online
+	status.Players.Max = response.PlayerCount.Max
+	status.MOTD.Clean = response.Motd
 
-	statusReq := s.createStatusRequest()
-	_, err = conn.Write(statusReq)
-	if err != nil {
-		return nil, err
-	}
-
-	conn.SetReadDeadline(time.Now().Add(s.queryTimeout))
-
-	response, err := s.readStatusResponse(conn)
-	if err != nil {
-		return nil, fmt.Errorf("no response from server")
-	}
-
-	status := s.parseResponse(ip, port, host, ping, response)
-
-	if icon := s.handleIcon(ip, port, response); icon != "" {
-		status.Icon = icon
+	if response.Favicon != "" && !strings.HasPrefix(response.Favicon, "data:") {
+		status.Icon = s.saveFavicon(host, port, response.Favicon)
 	}
 
 	return status, nil
+}
+
+func (s *ServerService) saveFavicon(host string, port int, faviconBase64 string) string {
+	iconData, err := decodeBase64(faviconBase64)
+	if err != nil {
+		return ""
+	}
+
+	img, err := png.Decode(bytes.NewReader(iconData))
+	if err != nil {
+		return ""
+	}
+
+	resized := resizeImage(img, 32, 32)
+
+	iconPath := s.cache.GetIconPath(host, port)
+	out, err := os.Create(iconPath)
+	if err != nil {
+		return ""
+	}
+	defer out.Close()
+	png.Encode(out, resized)
+
+	return s.cache.GetIconURL(host, port)
 }
 
 func (s *ServerService) createHandshake(host string, port int) []byte {
@@ -177,25 +186,6 @@ func (s *ServerService) readPacketWithID(conn net.Conn) ([]byte, error) {
 	}
 
 	return data, nil
-}
-
-func (s *ServerService) createHandshake(host string, port int) []byte {
-	var buf bytes.Buffer
-
-	buf.WriteByte(0x00)
-	buf.Write(encodeVarint(47))
-	buf.Write(encodeVarint(int32(len(host))))
-	buf.Write([]byte(host))
-	buf.Write(encodeVarint(int32(port)))
-	buf.Write(encodeVarint(1))
-
-	return s.createPacket(0, &buf)
-}
-
-func (s *ServerService) createStatusRequest() []byte {
-	var buf bytes.Buffer
-	buf.WriteByte(0x00)
-	return s.createPacket(0, &buf)
 }
 
 func (s *ServerService) readStatusResponse(conn net.Conn) ([]byte, error) {
