@@ -49,7 +49,7 @@ func (h *BannerHandler) GetBanner(c *fiber.Ctx) error {
 		})
 	}
 
-	c.Set("Content-Type", "image/svg+xml")
+	c.Set("Content-Type", "image/png")
 	c.Set("Cache-Control", "public, max-age=86400")
 
 	return c.Send(bannerData)
