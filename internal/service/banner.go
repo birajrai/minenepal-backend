@@ -118,9 +118,9 @@ func drawTextAt(img *image.RGBA, text string, x, y int, col color.RGBA, size int
 
 func drawChar(img *image.RGBA, r rune, x, y int, col color.RGBA, size int) {
 	font := getFont(r)
-	for dy := 0; dy < size; dy++ {
-		for dx := 0; dx < size/2; dx++ {
-			if font[dy]&(1<<(size/2-1-dx)) != 0 {
+	for dy := 0; dy < 8 && dy < size; dy++ {
+		for dx := 0; dx < 4 && dx < size/2; dx++ {
+			if font[dy]&(1<<(4-1-dx)) != 0 {
 				if x+dx < img.Bounds().Dx() && y+dy < img.Bounds().Dy() {
 					img.Set(x+dx, y+dy, col)
 				}
