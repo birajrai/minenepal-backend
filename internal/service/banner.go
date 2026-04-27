@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,17 +27,38 @@ func (b *BannerService) GenerateBanner(status *types.ServerStatus) ([]byte, erro
 	width := 800
 	height := 120
 	iconSize := 64
-	padding := 10
+	padding := 16
 
 	var svg strings.Builder
 
 	svg.WriteString(fmt.Sprintf(`<svg width="%d" height="%d" xmlns="http://www.w3.org/2000/svg">`, width, height))
 
-	svg.WriteString(`<defs><linearGradient id="grad" x1="0%" y1="0%" x2="0%" y2="100%">`)
-	svg.WriteString(`<stop offset="0%" style="stop-color:#8B4513;stop-opacity:1" />`)
-	svg.WriteString(`<stop offset="100%" style="stop-color:#654321;stop-opacity:1" />`)
-	svg.WriteString(`</linearGradient></defs>`)
-	svg.WriteString(`<rect width="100%" height="100%" fill="url(#grad)"/>`)
+	svg.WriteString(`<defs>
+		<linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+			<stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+			<stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+		</linearGradient>
+		<linearGradient id="accent" x1="0%" y1="0%" x2="0%" y2="100%">
+			<stop offset="0%" style="stop-color:#e94560;stop-opacity:1" />
+			<stop offset="100%" style="stop-color:#c73e54;stop-opacity:1" />
+		</linearGradient>
+		<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+			<feDropShadow dx="1" dy="1" stdDeviation="1" flood-opacity="0.3"/>
+		</filter>
+	</defs>`)
+
+	svg.WriteString(`<rect width="100%" height="100%" fill="url(#bg)"/>`)
+	svg.WriteString(`<rect width="4" height="100%" fill="url(#accent)"/>`)
+
+	iconY := (height - iconSize) / 2
+	if status.Icon != "" {
+		iconPath := strings.TrimPrefix(status.Icon, "/icons/")
+		fullIconPath := filepath.Join(b.cache.cacheDir, "icons", iconPath)
+		if data, err := os.ReadFile(fullIconPath); err == nil {
+			encoded := base64.StdEncoding.EncodeToString(data)
+			svg.WriteString(fmt.Sprintf(`<image x="%d" y="%d" width="%d" height="%d" href="data:image/png;base64,%s"/>`, padding+4, iconY-4, iconSize, iconSize, encoded))
+		}
+	}
 
 	motdText := status.MOTD.Clean
 	if motdText == "" {
@@ -45,30 +67,49 @@ func (b *BannerService) GenerateBanner(status *types.ServerStatus) ([]byte, erro
 	motdText = strings.ReplaceAll(motdText, "\n", " ")
 	motdText = escapeXML(motdText)
 
-	textX := iconSize + padding*2
-
-	svg.WriteString(fmt.Sprintf(`<text x="%d" y="50" font-family="Arial" font-size="14" fill="white">%s</text>`, textX, motdText))
-
-	if status.Ping > 0 {
-		pingColor := "#00ff00"
-		if status.Ping > 200 {
-			pingColor = "#ffff00"
-		} else if status.Ping > 500 {
-			pingColor = "#ff0000"
-		}
-		svg.WriteString(fmt.Sprintf(`<text x="%d" y="25" fill="%s" font-family="Arial" font-size="12" text-anchor="end">%dms</text>`, width-padding, pingColor, status.Ping))
+	minWidth := 60
+	if len(motdText) < minWidth {
+		motdText = motdText + strings.Repeat(" ", minWidth-len(motdText))
 	}
 
-	playersText := fmt.Sprintf("%d/%d players", status.Players.Online, status.Players.Max)
-	svg.WriteString(fmt.Sprintf(`<text x="%d" y="80" fill="#cccccc" font-family="Arial" font-size="12">%s</text>`, textX, playersText))
+	textX := iconSize + padding + 4
+	centerY := height / 2
+
+	svg.WriteString(fmt.Sprintf(`<text x="%d" y="%d" font-family="Consolas, Monaco, monospace" font-size="15" fill="#ffffff" font-weight="bold" filter="url(#shadow)">%s</text>`, textX, centerY-25, motdText))
+
+	pingY := padding + 12
+	if status.Ping > 0 {
+		pingColor := "#4ade80"
+		pingText := fmt.Sprintf("%dms", status.Ping)
+		if status.Ping > 300 {
+			pingColor = "#fbbf24"
+			pingText = fmt.Sprintf("%dms", status.Ping)
+		}
+		if status.Ping > 600 {
+			pingColor = "#f87171"
+		}
+		svg.WriteString(fmt.Sprintf(`<text x="%d" y="%d" font-family="Consolas, Monaco, monospace" font-size="11" fill="%s" text-anchor="end" font-weight="bold">%s</text>`, width-padding, pingY, pingColor, pingText))
+
+		pingDotY := pingY - 4
+		dotColor := pingColor
+		if status.Ping > 0 {
+			svg.WriteString(fmt.Sprintf(`<circle cx="%d" cy="%d" r="3" fill="%s"/><circle cx="%d" cy="%d" r="3" fill="%s" opacity="0.4"><circle cx="%d" cy="%d" r="3" fill="%s" opacity="0.2"/></circle>`, width-padding-45, pingDotY, dotColor, width-padding-45, pingDotY, dotColor, width-padding-45, pingDotY, dotColor))
+		}
+	}
+
+	playersText := fmt.Sprintf("Players: %d / %d", status.Players.Online, status.Players.Max)
+	svg.WriteString(fmt.Sprintf(`<text x="%d" y="%d" font-family="Consolas, Monaco, monospace" font-size="11" fill="#94a3b8">%s</text>`, textX, centerY+15, playersText))
 
 	if status.Version != "" {
 		versionText := status.Version
-		if len(versionText) > 30 {
-			versionText = versionText[:30] + "..."
+		if len(versionText) > 40 {
+			versionText = versionText[:40] + "..."
 		}
-		svg.WriteString(fmt.Sprintf(`<text x="%d" y="100" fill="#aaaaaa" font-family="Arial" font-size="10">%s</text>`, textX, escapeXML(versionText)))
+		svg.WriteString(fmt.Sprintf(`<text x="%d" y="%d" font-family="Consolas, Monaco, monospace" font-size="10" fill="#64748b">%s</text>`, textX, height-padding, escapeXML(versionText)))
 	}
+
+	bgHost := fmt.Sprintf("bg: %s:%d", status.IP, status.Port)
+	svg.WriteString(fmt.Sprintf(`<text x="%d" y="%d" font-family="Consolas, Monaco, monospace" font-size="9" fill="#475569" text-anchor="end">%s</text>`, width-padding, height-4, bgHost))
 
 	svg.WriteString(`</svg>`)
 
