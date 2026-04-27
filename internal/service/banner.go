@@ -39,6 +39,10 @@ func (b *BannerService) GenerateBanner(status *types.ServerStatus) ([]byte, erro
 	svg.WriteString(`</linearGradient></defs>`)
 	svg.WriteString(`<rect width="100%" height="100%" fill="url(#grad)"/>`)
 
+	if status.Icon != "" {
+		svg.WriteString(fmt.Sprintf(`<image href="%s" x="%d" y="%d" width="%d" height="%d"/>`, status.Icon, padding, padding, iconSize, iconSize))
+	}
+
 	motdText := status.MOTD.Clean
 	if motdText == "" {
 		motdText = status.Host

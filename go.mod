@@ -14,6 +14,7 @@ require (
 	github.com/fasthttp/websocket v1.5.3 // indirect
 	github.com/google/uuid v1.5.0 // indirect
 	github.com/jmoiron/jsonq v0.0.0-20150511023944-e874b168d07e // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/klauspost/compress v1.17.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

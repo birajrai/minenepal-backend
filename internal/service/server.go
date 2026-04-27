@@ -110,8 +110,13 @@ func (s *ServerService) queryServer(ip string, port int) (*types.ServerStatus, e
 	status.Players.Max = response.PlayerCount.Max
 	status.MOTD.Clean = response.Motd
 
-	if response.Favicon != "" && !strings.HasPrefix(response.Favicon, "data:") {
-		status.Icon = s.saveFavicon(host, port, response.Favicon)
+	if response.Favicon != "" {
+		if strings.HasPrefix(response.Favicon, "data:image/png;base64,") {
+			response.Favicon = strings.TrimPrefix(response.Favicon, "data:image/png;base64,")
+		}
+		if !strings.HasPrefix(response.Favicon, "data:") {
+			status.Icon = s.saveFavicon(host, port, response.Favicon)
+		}
 	}
 
 	return status, nil
