@@ -2,7 +2,6 @@ package service
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -98,12 +97,98 @@ func (s *ServerService) queryServer(ip string, port int) (*types.ServerStatus, e
 	defer conn.Close()
 	ping := int(time.Since(start).Milliseconds())
 
+	handshake := s.createHandshake(host, port)
+	_, err = conn.Write(handshake)
+	if err != nil {
+		return nil, err
+	}
+
+	statusReq := s.createStatusRequest()
+	_, err = conn.Write(statusReq)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := conn.SetReadDeadline(time.Now().Add(s.queryTimeout)); err != nil {
+		return nil, err
+	}
+
+	response, err := s.readStatusResponse(conn)
+	if err != nil {
+		return nil, fmt.Errorf("no response from server")
+	}
+
+	status := s.parseResponse(ip, port, host, ping, response)
+
+	if icon := s.handleIcon(ip, port, response); icon != "" {
+		status.Icon = icon
+	}
+
+	return status, nil
+}
+
+func (s *ServerService) createHandshake(host string, port int) []byte {
+	var buf bytes.Buffer
+
+	buf.WriteByte(0x00)
+	buf.Write(encodeVarint(47))
+	buf.Write(encodeVarint(int32(len(host))))
+	buf.Write([]byte(host))
+	buf.Write(encodeVarint(int32(port)))
+	buf.Write(encodeVarint(1))
+
+	return s.createPacket(0, &buf)
+}
+
+func (s *ServerService) createStatusRequest() []byte {
+	var buf bytes.Buffer
+	buf.WriteByte(0x00)
+	return s.createPacket(0, &buf)
+}
+
+func (s *ServerService) readStatusResponse(conn net.Conn) ([]byte, error) {
+	lengthBuf := make([]byte, 5)
+	n, err := conn.Read(lengthBuf)
+	if err != nil || n == 0 {
+		return nil, err
+	}
+
+	r := bytes.NewReader(lengthBuf)
+	length := decodeVarint(r)
+	if length <= 0 || length > 65536 {
+		return nil, fmt.Errorf("invalid length")
+	}
+
+	data := make([]byte, length)
+	_, err = io.ReadFull(conn, data)
+	if err != nil {
+		return nil, err
+	}
+
+	return data[3:], nil
+}
+	}
+
+	_ = s.lookupIP(host)
+
+	start := time.Now()
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, port), s.queryTimeout)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	ping := int(time.Since(start).Milliseconds())
+
 	if err := conn.SetReadDeadline(time.Now().Add(s.queryTimeout)); err != nil {
 		return nil, err
 	}
 
 	_, err = s.handshake(host, port, conn)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := conn.SetReadDeadline(time.Now().Add(s.queryTimeout)); err != nil {
 		return nil, err
 	}
 
@@ -154,20 +239,18 @@ func (s *ServerService) handshake(host string, port int, conn net.Conn) ([]byte,
 
 	buf.WriteByte(0x00)
 
-	protocol := int32(0)
+	protocol := int32(47)
 	buf.Write(encodeVarint(protocol))
 
 	hostBytes := []byte(host)
 	buf.Write(encodeVarint(int32(len(hostBytes))))
 	buf.Write(hostBytes)
 
-	portBytes := make([]byte, 4)
-	binary.BigEndian.PutUint32(portBytes, uint32(port))
-	buf.Write(portBytes)
+	buf.Write(encodeVarint(int32(port)))
 
 	buf.WriteByte(0x01)
 
-	packet := s.createPacket(1, &buf)
+	packet := s.createPacket(0, &buf)
 
 	_, err := conn.Write(packet)
 	if err != nil {
@@ -207,7 +290,12 @@ func (s *ServerService) createPacket(packetID int, data *bytes.Buffer) []byte {
 }
 
 func (s *ServerService) readResponse(conn net.Conn) []byte {
-	_, err := conn.Write([]byte{0x01, 0x00})
+	var buf bytes.Buffer
+	buf.WriteByte(0x00)
+
+	packet := s.createPacket(0, &buf)
+
+	_, err := conn.Write(packet)
 	if err != nil {
 		return nil
 	}

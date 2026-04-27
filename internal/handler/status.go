@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"strconv"
+	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -19,19 +19,14 @@ func NewStatusHandler(serverService *service.ServerService) *StatusHandler {
 }
 
 func (h *StatusHandler) GetStatus(c *fiber.Ctx) error {
-	ip := c.Params("ip")
-	if ip == "" {
+	hostParam := c.Params("ip")
+	if hostParam == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "IP address is required",
 		})
 	}
 
-	port := 25565
-	if c.Params("port") != "" {
-		if p, err := strconv.Atoi(c.Params("port")); err == nil {
-			port = p
-		}
-	}
+	ip, port := parseHostPort(hostParam)
 
 	status, err := h.serverService.GetStatus(ip, port)
 	if err != nil {
@@ -45,6 +40,21 @@ func (h *StatusHandler) GetStatus(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(status)
+}
+
+func parseHostPort(s string) (string, int) {
+	ip := s
+	port := 25565
+
+	if strings.Contains(s, ":") {
+		parts := strings.SplitN(s, ":", 2)
+		ip = parts[0]
+		if len(parts) > 1 {
+			fmt.Sscanf(parts[1], "%d", &port)
+		}
+	}
+
+	return ip, port
 }
 
 func (h *StatusHandler) GetStatusBulk(c *fiber.Ctx) error {
