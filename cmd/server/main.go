@@ -112,19 +112,15 @@ func main() {
 	app.Use("/ws", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
 			c.Locals("allowed", true)
-			c.Locals("hub", hub)
 			return c.Next()
 		}
 		return fiber.ErrUpgradeRequired
 	})
 
-	app.Get("/ws", wsHandler.Upgrade)
-	app.Get("/ws/:ip/:port", wsHandler.Upgrade)
-	app.Get("/ws/:ip", wsHandler.Upgrade)
-
-	app.ws("/ws", wsHandler.Handle)
-	app.ws("/ws/:ip/:port", wsHandler.Handle)
-	app.ws("/ws/:ip", wsHandler.Handle)
+	wsHandlerFunc := func(c *websocket.Conn) {
+		wsHandler.Handle(c)
+	}
+	app.Get("/ws", websocket.New(wsHandlerFunc))
 
 	go func() {
 		if err := app.Listen(cfg.Host + ":" + cfg.Port); err != nil {
