@@ -1,35 +1,40 @@
-# dependencies (bun install)
-node_modules
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+minenepal-backend
+minenepal-backend-test
 
-# output
-out
-dist
-*.tgz
+# Test binary
+*.test
 
-# code coverage
-coverage
-*.lcov
+# Output of the go coverage tool
+*.out
 
-# logs
-logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+# Dependency directories
+vendor/
 
-# dotenv environment variable files
-.env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
 
-# caches
-.eslintcache
-.cache
-*.tsbuildinfo
-
-# IntelliJ based IDEs
-.idea
-
-# Finder (MacOS) folder config
+# OS
 .DS_Store
-/cache
+Thumbs.db
+
+# Build
+dist/
+build/
+
+# Cache
+cache/
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
