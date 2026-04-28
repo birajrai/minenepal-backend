@@ -30,7 +30,13 @@ RUN mkdir -p /app/cache/icons /app/cache/banners /app/cache/status
 # Copy binary from builder
 COPY --from=builder /app/minenepal-backend .
 
-# Set environment
+# Create non-root user
+RUN addgroup -g 1000 appuser && \
+    adduser -D -u 1000 -G appuser appuser && \
+    chown -R appuser:appuser /app
+USER appuser
+
+# Set environment (SSL handled by Render/Dokploy)
 ENV PORT=10000
 ENV HOST=0.0.0.0
 ENV CACHE_DIR=/app/cache
