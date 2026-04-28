@@ -1,27 +1,14 @@
 package types
 
-import "bytes"
-import "encoding/json"
-
-type HTMLString string
-
-func (s HTMLString) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.Encode(string(s))
-	return bytes.TrimRight(buf.Bytes(), "\n"), nil
-}
-
 type Players struct {
 	Online int `json:"online"`
 	Max    int `json:"max"`
 }
 
 type MOTD struct {
-	Clean string      `json:"clean"`
-	Raw   string      `json:"raw"`
-	HTML  HTMLString  `json:"html"`
+	Clean string `json:"clean"`
+	Raw   string `json:"raw"`
+	HTML  string `json:"html"`
 }
 
 type ServerStatus struct {
