@@ -2,6 +2,8 @@ package handler
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -80,10 +82,28 @@ func getSystemMetrics() metricsData {
 			HeapTotal: fmt.Sprintf("%.2f MB", float64(memStats.HeapSys)/1024/1024),
 			External:  fmt.Sprintf("%.2f MB", float64(memStats.Lookups)/1024/1024),
 		},
-		CPU: types.CPUMetrics{
-			Usage:       "0%",
-			LoadAverage: []string{"0", "0", "0"},
-		},
-		Storage: "0 MB",
+		CPU:     getCPUMetrics(),
+		Storage: getStorageMetrics(),
 	}
+}
+
+func getCPUMetrics() types.CPUMetrics {
+	return types.CPUMetrics{
+		Usage:       "N/A",
+		LoadAverage: []string{"N/A", "N/A", "N/A"},
+	}
+}
+
+func getStorageMetrics() string {
+	cacheDir := "./cache"
+	var size int64
+
+	filepath.Walk(cacheDir, func(_ string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			size += info.Size()
+		}
+		return nil
+	})
+
+	return fmt.Sprintf("%.2f MB", float64(size)/1024/1024)
 }

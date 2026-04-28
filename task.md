@@ -446,7 +446,7 @@ GET /api/server/banner/:ip/:port
 - `port` (optional): Server port (default: 25565)
 
 **Response:**
-- Content-Type: `image/webp`
+- Content-Type: `image/svg+xml`
 - Cached for 24 hours
 
 **Banner Design:**

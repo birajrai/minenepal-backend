@@ -9,11 +9,11 @@ import (
 )
 
 type Config struct {
-	Port                string
-	Host                string
-	CacheTTL            time.Duration
-	BannerCacheTTL      time.Duration
-	CacheDir            string
+	Port               string
+	Host               string
+	CacheTTL           time.Duration
+	BannerCacheTTL     time.Duration
+	CacheDir           string
 	ServerQueryTimeout time.Duration
 	VotifierTimeout    time.Duration
 	LogLevel           zerolog.Level

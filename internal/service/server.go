@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/disintegration/imaging"
 	"github.com/iverly/go-mcping/mcping"
 	"minenepal-backend/pkg/types"
 )
@@ -97,13 +98,13 @@ func (s *ServerService) queryServer(ip string, port int) (*types.ServerStatus, e
 		return s.offlineStatus(ip, port, err.Error()), nil
 	}
 
-status := &types.ServerStatus{
-		Online:  true,
+	status := &types.ServerStatus{
+		Online: true,
 		Host:   host,
-		IP:    ip,
-		Port:  port,
-		Ping:  ping,
-		MOTD:  types.MOTD{},
+		IP:     ip,
+		Port:   port,
+		Ping:   ping,
+		MOTD:   types.MOTD{},
 	}
 	status.Version = response.Version
 	status.Players.Online = response.PlayerCount.Online
@@ -516,7 +517,7 @@ func resizeImage(img image.Image, width, height int) image.Image {
 		return img
 	}
 
-	return img
+	return imaging.Resize(img, width, height, imaging.Lanczos)
 }
 
 func decodeBase64(s string) ([]byte, error) {

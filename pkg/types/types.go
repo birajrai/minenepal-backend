@@ -12,18 +12,18 @@ type MOTD struct {
 }
 
 type ServerStatus struct {
-	Online   bool   `json:"online"`
-	Host     string `json:"host"`
-	IP       string `json:"ip"`
-	Port     int    `json:"port"`
-	RawIP    string `json:"raw_ip,omitempty"`
-	Ping     int    `json:"ping,omitempty"`
-	Version  string `json:"version"`
+	Online   bool    `json:"online"`
+	Host     string  `json:"host"`
+	IP       string  `json:"ip"`
+	Port     int     `json:"port"`
+	RawIP    string  `json:"raw_ip,omitempty"`
+	Ping     int     `json:"ping,omitempty"`
+	Version  string  `json:"version"`
 	Players  Players `json:"players"`
-	MOTD     MOTD   `json:"motd"`
-	Icon     string `json:"icon,omitempty"`
-	CachedAt int64  `json:"cached_at,omitempty"`
-	Error    string `json:"error,omitempty"`
+	MOTD     MOTD    `json:"motd"`
+	Icon     string  `json:"icon,omitempty"`
+	CachedAt int64   `json:"cached_at,omitempty"`
+	Error    string  `json:"error,omitempty"`
 }
 
 type VoteRequest struct {
@@ -44,13 +44,13 @@ type VoteResponse struct {
 }
 
 type HealthResponse struct {
-	Status        string         `json:"status"`
-	Uptime        string         `json:"uptime"`
-	ResponseTime  string         `json:"responseTime"`
-	Requests      int64          `json:"requests"`
-	Memory        MemoryMetrics  `json:"memory"`
-	CPU           CPUMetrics     `json:"cpu"`
-	Storage       string         `json:"storage"`
+	Status       string        `json:"status"`
+	Uptime       string        `json:"uptime"`
+	ResponseTime string        `json:"responseTime"`
+	Requests     int64         `json:"requests"`
+	Memory       MemoryMetrics `json:"memory"`
+	CPU          CPUMetrics    `json:"cpu"`
+	Storage      string        `json:"storage"`
 }
 
 type MemoryMetrics struct {

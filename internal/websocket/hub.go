@@ -11,9 +11,9 @@ import (
 )
 
 type Client struct {
-	Conn      *websocket.Conn
+	Conn          *websocket.Conn
 	Subscriptions map[string]bool
-	mu         sync.RWMutex
+	mu            sync.RWMutex
 }
 
 type Hub struct {
@@ -51,7 +51,7 @@ func (h *Hub) Run() {
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
 				client.Conn.Close()
-				
+
 				for server := range client.Subscriptions {
 					h.removeSubscription(client, server)
 				}
@@ -103,7 +103,7 @@ func (h *Hub) Unsubscribe(client *Client, servers []string) {
 func (h *Hub) addSubscription(client *Client, server string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	clients := h.serverHub[server]
 	for _, c := range clients {
 		if c == client {
@@ -116,7 +116,7 @@ func (h *Hub) addSubscription(client *Client, server string) {
 func (h *Hub) removeSubscription(client *Client, server string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	clients := h.serverHub[server]
 	newClients := make([]*Client, 0, len(clients))
 	for _, c := range clients {
@@ -196,7 +196,7 @@ func (h *Hub) ClientCount() int {
 func (h *Hub) GetSubscriptions(client *Client) []string {
 	client.mu.RLock()
 	defer client.mu.RUnlock()
-	
+
 	servers := make([]string, 0, len(client.Subscriptions))
 	for server := range client.Subscriptions {
 		servers = append(servers, server)

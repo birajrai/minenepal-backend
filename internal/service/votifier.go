@@ -56,7 +56,7 @@ func (v *VotifierService) sendV1(req *types.VoteRequest) error {
 		port = 8192
 	}
 
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := formatAddress(host, port)
 	conn, err := net.DialTimeout("tcp", addr, v.timeout)
 	if err != nil {
 		return fmt.Errorf("connection failed: %w", err)
@@ -104,7 +104,7 @@ func (v *VotifierService) sendV2(req *types.VoteRequest) error {
 		port = 8192
 	}
 
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := formatAddress(host, port)
 	conn, err := net.DialTimeout("tcp", addr, v.timeout)
 	if err != nil {
 		return fmt.Errorf("connection failed: %w", err)
@@ -152,7 +152,7 @@ func (v *VotifierService) sendV2(req *types.VoteRequest) error {
 	signature := computeHMAC(jsonPayload, req.VotifierToken)
 
 	packet := map[string]string{
-		"payload":  base64.StdEncoding.EncodeToString(jsonPayload),
+		"payload":   base64.StdEncoding.EncodeToString(jsonPayload),
 		"signature": signature,
 	}
 
@@ -227,6 +227,13 @@ func computeHMAC(data []byte, key string) string {
 	h := hmac.New(sha256.New, []byte(key))
 	h.Write(data)
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
+}
+
+func formatAddress(host string, port int) string {
+	if strings.Contains(host, ":") {
+		return fmt.Sprintf("[%s]:%d", host, port)
+	}
+	return fmt.Sprintf("%s:%d", host, port)
 }
 
 func (v *VotifierService) GetTimeout() time.Duration {

@@ -6,12 +6,12 @@ import (
 )
 
 var (
-	RequestCount  int64 = 0
-	CacheHits    int64 = 0
-	CacheMisses  int64 = 0
-	VotesTotal   int64 = 0
-	responseTimes   []float64
-	responseMu      sync.Mutex
+	RequestCount     int64 = 0
+	CacheHits        int64 = 0
+	CacheMisses      int64 = 0
+	VotesTotal       int64 = 0
+	responseTimes    []float64
+	responseMu       sync.Mutex
 	maxResponseTimes = 100
 )
 

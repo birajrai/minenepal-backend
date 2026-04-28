@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"fmt"
+
 	"github.com/gofiber/fiber/v2"
 	"minenepal-backend/internal/service"
+	"minenepal-backend/internal/stats"
 	"minenepal-backend/internal/websocket"
 	"minenepal-backend/pkg/types"
 )
@@ -62,9 +65,9 @@ func (h *VoteHandler) SendVote(c *fiber.Ctx) error {
 	}
 
 	if err := h.votifierService.SendVote(&req); err != nil {
-		serverKey := req.ServerIP
-		if req.ServerPort != 0 {
-			serverKey = req.ServerIP
+		serverKey := fmt.Sprintf("%s:%d", req.ServerIP, req.ServerPort)
+		if req.ServerPort == 0 {
+			serverKey = fmt.Sprintf("%s:%d", req.ServerIP, 25565)
 		}
 		h.hub.BroadcastVote(serverKey, req.Username, false)
 
@@ -74,8 +77,12 @@ func (h *VoteHandler) SendVote(c *fiber.Ctx) error {
 		})
 	}
 
-	serverKey := req.ServerIP
+	serverKey := fmt.Sprintf("%s:%d", req.ServerIP, req.ServerPort)
+	if req.ServerPort == 0 {
+		serverKey = fmt.Sprintf("%s:%d", req.ServerIP, 25565)
+	}
 	h.hub.BroadcastVote(serverKey, req.Username, true)
+	stats.IncrementVotes()
 
 	return c.JSON(types.VoteResponse{
 		Success: true,
