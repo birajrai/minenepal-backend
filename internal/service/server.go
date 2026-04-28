@@ -99,19 +99,20 @@ func (s *ServerService) queryServer(ip string, port int) (*types.ServerStatus, e
 	}
 
 	status := &types.ServerStatus{
-		Online: true,
-		Host:   host,
-		IP:     ip,
-		Port:   port,
-		Ping:   ping,
-		MOTD:   types.MOTD{},
+		Online:  true,
+		Host:    host,
+		IP:      ip,
+		Port:    port,
+		RawIP:   s.lookupIP(host),
+		Ping:    ping,
+		MOTD:    types.MOTD{},
 	}
 	status.Version = response.Version
 	status.Players.Online = response.PlayerCount.Online
 	status.Players.Max = response.PlayerCount.Max
 	status.MOTD.Raw = response.Motd
 	status.MOTD.Clean = stripColorCodes(response.Motd)
-	status.MOTD.HTML = formatMOTDHTML(response.Motd)
+	status.MOTD.HTML = types.HTMLString(formatMOTDHTML(response.Motd))
 
 	if response.Favicon != "" {
 		if strings.HasPrefix(response.Favicon, "data:image/png;base64,") {
@@ -412,7 +413,7 @@ func (s *ServerService) parseResponse(ip string, port int, host string, ping int
 	}
 
 	status.MOTD.Clean = stripColorCodes(status.MOTD.Raw)
-	status.MOTD.HTML = formatMOTDHTML(status.MOTD.Raw)
+	status.MOTD.HTML = types.HTMLString(formatMOTDHTML(status.MOTD.Raw))
 
 	return status
 }
