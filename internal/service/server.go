@@ -98,9 +98,6 @@ func (s *ServerService) queryServer(ip string, port int) (*types.ServerStatus, e
 		return s.offlineStatus(ip, port, err.Error()), nil
 	}
 
-	// Convert Minecraft color codes from 0x15 to §
-	motd := convertColorCodes(response.Motd)
-
 	status := &types.ServerStatus{
 		Online:  true,
 		Host:    host,
@@ -113,9 +110,9 @@ func (s *ServerService) queryServer(ip string, port int) (*types.ServerStatus, e
 	status.Version = response.Version
 	status.Players.Online = response.PlayerCount.Online
 	status.Players.Max = response.PlayerCount.Max
-	status.MOTD.Raw = motd
-	status.MOTD.Clean = stripColorCodes(motd)
-	status.MOTD.HTML = types.HTMLString(formatMOTDHTML(motd))
+	status.MOTD.Raw = response.Motd
+	status.MOTD.Clean = stripColorCodes(response.Motd)
+	status.MOTD.HTML = types.HTMLString(formatMOTDHTML(response.Motd))
 
 	if response.Favicon != "" {
 		if strings.HasPrefix(response.Favicon, "data:image/png;base64,") {
@@ -243,11 +240,11 @@ func (s *ServerService) lookupSRV(host string, defaultPort int) string {
 }
 
 func (s *ServerService) lookupIP(host string) string {
-	ips, err := net.LookupIP(host)
+	ips, err := net.LookupHost(host)
 	if err != nil || len(ips) == 0 {
-		return ""
+		return host
 	}
-	return ips[0].String()
+	return ips[0]
 }
 
 func (s *ServerService) handshake(host string, port int, conn net.Conn) ([]byte, error) {
@@ -415,16 +412,14 @@ func (s *ServerService) parseResponse(ip string, port int, host string, ping int
 		status.MOTD.Raw = desc
 	}
 
-	// Convert 0x15 to §
-	status.MOTD.Raw = convertColorCodes(status.MOTD.Raw)
 	status.MOTD.Clean = stripColorCodes(status.MOTD.Raw)
 	status.MOTD.HTML = types.HTMLString(formatMOTDHTML(status.MOTD.Raw))
 
 	return status
 }
 
-var colorCodeRegex = regexp.MustCompile(`[\xc2\x15]?[§\x15][0-9a-fk-or]`)
-var colorFormatRegex = regexp.MustCompile(`[\xc2\x15]?[§\x15]([0-9a-fk-or])([^§\x15]*)`)
+var colorCodeRegex = regexp.MustCompile(`§[0-9a-fk-or]`)
+var colorFormatRegex = regexp.MustCompile(`§([0-9a-fk-or])([^§]*)`)
 
 var colorMap = map[string]string{
 	"0": "#000000", "1": "#0000AA", "2": "#00AA00", "3": "#00AAAA",
@@ -434,52 +429,27 @@ var colorMap = map[string]string{
 	"l": "", "o": "", "n": "", "m": "", "k": "", "r": "",
 }
 
-func convertColorCodes(s string) string {
-	// Minecraft uses § (0xc2a7 in UTF-8) or 0x15 for color codes
-	var result []byte
-	for i := 0; i < len(s); i++ {
-		// Check for UTF-8 § (0xc2a7)
-		if i < len(s)-1 && s[i] == 0xc2 && s[i+1] == 0xa7 {
-			result = append(result, '§')
-			i++ // skip the next byte
-		} else if s[i] == 0x15 {
-			// Replace 0x15 with §
-			result = append(result, '§')
-		} else if s[i] == '§' {
-			result = append(result, '§')
-		} else {
-			result = append(result, s[i])
-		}
-	}
-	return string(result)
-}
-
 func stripColorCodes(s string) string {
 	return colorCodeRegex.ReplaceAllString(s, "")
 }
 
-func htmlEscape(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "<")
-	s = strings.ReplaceAll(s, ">", ">")
-	return s
-}
-
 func formatMOTDHTML(raw string) string {
-	result := colorFormatRegex.ReplaceAllStringFunc(raw, func(match string) string {
-		// Find the § symbol and color code
-		idx := strings.Index(match, "§")
-		if idx == -1 || idx+1 >= len(match) {
+	return colorFormatRegex.ReplaceAllStringFunc(raw, func(match string) string {
+		parts := colorFormatRegex.FindStringSubmatch(match)
+		if len(parts) < 3 {
 			return ""
 		}
-		code := string(match[idx+1])
-		text := match[idx+2:]
-		
+		code := parts[1]
+		text := parts[2]
+
 		if code == "l" || code == "o" {
+			style := ""
 			if code == "l" {
-				return fmt.Sprintf(`<span style="font-weight: bold">%s</span>`, text)
+				style = "font-weight: bold;"
+			} else if code == "o" {
+				style = "font-style: italic;"
 			}
-			return fmt.Sprintf(`<span style="font-style: italic">%s</span>`, text)
+			return fmt.Sprintf(`<span style="%s">%s</span>`, style, text)
 		}
 
 		colorVal, ok := colorMap[code]
@@ -488,14 +458,6 @@ func formatMOTDHTML(raw string) string {
 		}
 		return fmt.Sprintf(`<span style="color: %s">%s</span>`, colorVal, text)
 	})
-	return result
-}
-
-func htmlEscape(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "<")
-	s = strings.ReplaceAll(s, ">", ">")
-	return s
 }
 
 func (s *ServerService) handleIcon(ip string, port int, data []byte) string {

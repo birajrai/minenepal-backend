@@ -6,32 +6,11 @@ import "encoding/json"
 type HTMLString string
 
 func (s HTMLString) MarshalJSON() ([]byte, error) {
-	// Manually build JSON string without HTML escaping
 	var buf bytes.Buffer
-	buf.WriteByte('"')
-	for _, r := range string(s) {
-		switch r {
-		case '"':
-			buf.WriteString(`\"`)
-		case '\\':
-			buf.WriteString(`\\`)
-		case '\n':
-			buf.WriteString(`\n`)
-		case '\r':
-			buf.WriteString(`\r`)
-		case '\t':
-			buf.WriteString(`\t`)
-		default:
-			if r < 0x20 || r == 0x7f {
-				// Escape control characters as \uXXXX
-				fmt.Fprintf(&buf, `\u%04x`, r)
-			} else {
-				buf.WriteRune(r)
-			}
-		}
-	}
-	buf.WriteByte('"')
-	return buf.Bytes(), nil
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.Encode(string(s))
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
 type Players struct {
